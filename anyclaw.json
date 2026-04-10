@@ -1,0 +1,54 @@
+{
+  "llm": {
+    "provider": "ollama",
+    "model": "llama3.2",
+    "base_url": "http://127.0.0.1:11434",
+    "api_key": "",
+    "max_tokens": 4096,
+    "temperature": 0.7
+  },
+  "agent": {
+    "name": "AnyClaw",
+    "description": "Your AI assistant with file-based memory",
+    "work_dir": ".anyclaw",
+    "working_dir": "workflows",
+    "permission_level": "limited",
+    "require_confirmation_for_dangerous": true,
+    "lang": "CN"
+  },
+  "skills": {
+    "dir": "skills",
+    "auto_load": true
+  },
+  "memory": {
+    "dir": "memory",
+    "max_history": 100,
+    "format": "markdown",
+    "auto_save": true
+  },
+  "gateway": {
+    "host": "127.0.0.1",
+    "port": 18789,
+    "bind": "loopback"
+  },
+  "plugins": {
+    "dir": "plugins",
+    "allow_exec": false,
+    "require_trust": true
+  },
+  "security": {
+    "public_paths": [
+      "/healthz"
+    ],
+    "protect_events": true,
+    "rate_limit_rpm": 120,
+    "command_timeout_seconds": 30
+  },
+  "orchestrator": {
+    "enabled": true,
+    "max_concurrent_agents": 4,
+    "max_retries": 2,
+    "timeout_seconds": 300,
+    "enable_decomposition": true
+  }
+}
