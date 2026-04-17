@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -129,15 +128,6 @@ func (s *Server) resumeApprovedSessionApproval(ctx context.Context, approval *Ap
 		Resume: true,
 	})
 	if err != nil {
-		if errors.Is(err, ErrTaskWaitingApproval) {
-			return err
-		}
-		s.updateSessionPresence(sessionID, "idle", false)
-		s.appendEvent("chat.failed", sessionID, map[string]any{
-			"message": message,
-			"error":   err.Error(),
-			"source":  "approval_resume",
-		})
 		return err
 	}
 	return nil

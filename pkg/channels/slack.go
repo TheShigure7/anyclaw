@@ -130,17 +130,9 @@ func (a *SlackAdapter) pollOnce(ctx context.Context, handle InboundHandler) erro
 				meta["caption"] = strings.TrimSpace(msg.Text)
 			}
 
-			decision := a.router.Decide(RouteRequest{Channel: "slack", Source: a.config.DefaultChannel + ":" + msg.User, Text: "[voice message]", ThreadID: msg.ThreadTS})
-			sessionID := a.sessions[decision.Key]
-			if decision.SessionID != "" {
-				sessionID = decision.SessionID
-			}
-			sessionID, response, err := handle(ctx, sessionID, audioURL, meta)
+			sessionID, response, err := handle(ctx, "", audioURL, meta)
 			if err != nil {
 				return err
-			}
-			if sessionID != "" {
-				a.sessions[decision.Key] = sessionID
 			}
 			if err := a.sendMessage(ctx, response, msg.ThreadTS); err != nil {
 				return err
@@ -152,9 +144,6 @@ func (a *SlackAdapter) pollOnce(ctx context.Context, handle InboundHandler) erro
 				"message_type": "voice_note",
 				"audio_url":    audioURL,
 				"audio_mime":   audioMIME,
-				"route":        decision.Key,
-				"agent":        decision.Agent,
-				"workspace":    decision.Workspace,
 			})
 			continue
 		}
@@ -163,29 +152,18 @@ func (a *SlackAdapter) pollOnce(ctx context.Context, handle InboundHandler) erro
 			continue
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "slack", Source: a.config.DefaultChannel + ":" + msg.User, Text: msg.Text, ThreadID: msg.ThreadTS})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-		sessionID, response, err := handle(ctx, sessionID, msg.Text, meta)
+		sessionID, response, err := handle(ctx, "", msg.Text, meta)
 		if err != nil {
 			return err
-		}
-		if sessionID != "" {
-			a.sessions[decision.Key] = sessionID
 		}
 		if err := a.sendMessage(ctx, response, msg.ThreadTS); err != nil {
 			return err
 		}
 		a.base.markActivity()
 		a.append("channel.slack.message", sessionID, map[string]any{
-			"channel":   a.config.DefaultChannel,
-			"user":      msg.User,
-			"text":      msg.Text,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
+			"channel": a.config.DefaultChannel,
+			"user":    msg.User,
+			"text":    msg.Text,
 		})
 	}
 	return nil
@@ -405,31 +383,23 @@ func (a *SlackAdapter) pollOnceStream(ctx context.Context, handle StreamChunkHan
 			"thread_id":    msg.ThreadTS,
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "slack", Source: a.config.DefaultChannel + ":" + msg.User, Text: msg.Text, ThreadID: msg.ThreadTS})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-
+		var sessionID string
 		err := a.sendStreamingMessage(ctx, func(onChunk func(chunk string)) error {
-			_, err := handle(ctx, sessionID, msg.Text, meta, func(chunk string) error {
+			currentSessionID, err := handle(ctx, "", msg.Text, meta, func(chunk string) error {
 				onChunk(chunk)
 				return nil
 			})
+			sessionID = currentSessionID
 			return err
 		})
 		if err != nil {
 			return err
 		}
-		a.sessions[decision.Key] = sessionID
 		a.base.markActivity()
 		a.append("channel.slack.message", sessionID, map[string]any{
 			"channel":   a.config.DefaultChannel,
 			"user":      msg.User,
 			"text":      msg.Text,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
 			"streaming": true,
 		})
 	}

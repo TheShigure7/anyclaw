@@ -82,14 +82,9 @@ func (a *DiscordAdapter) HandleInteraction(ctx context.Context, body []byte, han
 			message = fmt.Sprintf("%v", opt.Value)
 		}
 	}
-	decision := a.router.Decide(RouteRequest{Channel: "discord", Source: payload.ChannelID + ":" + payload.Member.User.ID, Text: message})
-	sessionID := a.sessions[decision.Key]
-	respSession, response, err := handle(ctx, sessionID, message, map[string]string{"channel": "discord", "channel_id": payload.ChannelID, "guild_id": payload.GuildID, "user_id": payload.Member.User.ID, "username": payload.Member.User.Username, "reply_target": payload.ChannelID, "message_id": fmt.Sprintf("interaction:%d", time.Now().UnixNano())})
+	_, response, err := handle(ctx, "", message, map[string]string{"channel": "discord", "channel_id": payload.ChannelID, "guild_id": payload.GuildID, "user_id": payload.Member.User.ID, "username": payload.Member.User.Username, "reply_target": payload.ChannelID, "message_id": fmt.Sprintf("interaction:%d", time.Now().UnixNano())})
 	if err != nil {
 		return nil, err
-	}
-	if respSession != "" {
-		a.sessions[decision.Key] = respSession
 	}
 	return map[string]any{"type": 4, "data": map[string]any{"content": response}}, nil
 }
@@ -265,14 +260,9 @@ func (a *DiscordAdapter) handleGatewayEvent(ctx context.Context, eventType strin
 				meta["caption"] = strings.TrimSpace(msg.Content)
 			}
 
-			decision := a.router.Decide(RouteRequest{Channel: "discord", Source: msg.ChannelID + ":" + msg.Author.ID, Text: "[voice message]", ThreadID: msg.MessageReference.MessageID})
-			sessionID := a.sessions[decision.Key]
-			respSession, response, err := handle(ctx, sessionID, audioURL, meta)
+			_, response, err := handle(ctx, "", audioURL, meta)
 			if err != nil {
 				return err
-			}
-			if respSession != "" {
-				a.sessions[decision.Key] = respSession
 			}
 			return a.sendMessage(ctx, msg.ChannelID, "", response)
 		}
@@ -281,14 +271,9 @@ func (a *DiscordAdapter) handleGatewayEvent(ctx context.Context, eventType strin
 			return nil
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "discord", Source: msg.ChannelID + ":" + msg.Author.ID, Text: msg.Content, ThreadID: msg.MessageReference.MessageID})
-		sessionID := a.sessions[decision.Key]
-		respSession, response, err := handle(ctx, sessionID, msg.Content, meta)
+		_, response, err := handle(ctx, "", msg.Content, meta)
 		if err != nil {
 			return err
-		}
-		if respSession != "" {
-			a.sessions[decision.Key] = respSession
 		}
 		return a.sendMessage(ctx, msg.ChannelID, "", response)
 	}
@@ -384,7 +369,6 @@ func (a *DiscordAdapter) pollOnce(ctx context.Context, handle InboundHandler) er
 			continue
 		}
 		a.latestID = msg.ID
-		source := a.config.DefaultChannel + ":" + msg.Author.ID
 
 		meta := map[string]string{
 			"channel":      "discord",
@@ -412,17 +396,9 @@ func (a *DiscordAdapter) pollOnce(ctx context.Context, handle InboundHandler) er
 				replyTarget = threadID
 			}
 
-			decision := a.router.Decide(RouteRequest{Channel: "discord", Source: source, Text: "[voice message]", ThreadID: threadID})
-			sessionID := a.sessions[decision.Key]
-			if decision.SessionID != "" {
-				sessionID = decision.SessionID
-			}
-			sessionID, response, err := handle(ctx, sessionID, audioURL, meta)
+			sessionID, response, err := handle(ctx, "", audioURL, meta)
 			if err != nil {
 				return err
-			}
-			if sessionID != "" {
-				a.sessions[decision.Key] = sessionID
 			}
 			if err := a.sendMessage(ctx, replyTarget, threadID, response); err != nil {
 				return err
@@ -435,9 +411,6 @@ func (a *DiscordAdapter) pollOnce(ctx context.Context, handle InboundHandler) er
 				"message_type": "voice_note",
 				"audio_url":    audioURL,
 				"audio_mime":   audioMIME,
-				"route":        decision.Key,
-				"agent":        decision.Agent,
-				"workspace":    decision.Workspace,
 			})
 			continue
 		}
@@ -447,34 +420,23 @@ func (a *DiscordAdapter) pollOnce(ctx context.Context, handle InboundHandler) er
 		}
 
 		threadID := strings.TrimSpace(msg.ParentID)
-		decision := a.router.Decide(RouteRequest{Channel: "discord", Source: source, Text: msg.Content, ThreadID: threadID})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
 		replyTarget := a.config.DefaultChannel
 		if threadID != "" {
 			replyTarget = threadID
 		}
-		sessionID, response, err := handle(ctx, sessionID, msg.Content, meta)
+		sessionID, response, err := handle(ctx, "", msg.Content, meta)
 		if err != nil {
 			return err
-		}
-		if sessionID != "" {
-			a.sessions[decision.Key] = sessionID
 		}
 		if err := a.sendMessage(ctx, replyTarget, threadID, response); err != nil {
 			return err
 		}
 		a.base.markActivity()
 		a.append("channel.discord.message", sessionID, map[string]any{
-			"channel":   a.config.DefaultChannel,
-			"user":      msg.Author.Username,
-			"user_id":   msg.Author.ID,
-			"text":      msg.Content,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
+			"channel": a.config.DefaultChannel,
+			"user":    msg.Author.Username,
+			"user_id": msg.Author.ID,
+			"text":    msg.Content,
 		})
 	}
 	return nil
@@ -759,14 +721,8 @@ func (a *DiscordAdapter) handleGatewayEventStream(ctx context.Context, eventType
 			"sender":       msg.Author.Username,
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "discord", Source: msg.ChannelID + ":" + msg.Author.ID, Text: msg.Content, ThreadID: msg.MessageReference.MessageID})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-
 		err := a.sendStreamingMessage(ctx, msg.ChannelID, "", func(onChunk func(chunk string)) error {
-			_, err := handle(ctx, sessionID, msg.Content, meta, func(chunk string) error {
+			_, err := handle(ctx, "", msg.Content, meta, func(chunk string) error {
 				onChunk(chunk)
 				return nil
 			})
@@ -775,7 +731,6 @@ func (a *DiscordAdapter) handleGatewayEventStream(ctx context.Context, eventType
 		if err != nil {
 			return err
 		}
-		a.sessions[decision.Key] = sessionID
 		a.base.markActivity()
 		return nil
 	}
@@ -819,7 +774,6 @@ func (a *DiscordAdapter) pollOnceStream(ctx context.Context, handle StreamChunkH
 			continue
 		}
 		a.latestID = msg.ID
-		source := a.config.DefaultChannel + ":" + msg.Author.ID
 
 		if strings.TrimSpace(msg.Content) == "" {
 			continue
@@ -837,36 +791,29 @@ func (a *DiscordAdapter) pollOnceStream(ctx context.Context, handle StreamChunkH
 		}
 
 		threadID := strings.TrimSpace(msg.ParentID)
-		decision := a.router.Decide(RouteRequest{Channel: "discord", Source: source, Text: msg.Content, ThreadID: threadID})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
 		replyTarget := a.config.DefaultChannel
 		if threadID != "" {
 			replyTarget = threadID
 		}
 
+		var sessionID string
 		err := a.sendStreamingMessage(ctx, replyTarget, threadID, func(onChunk func(chunk string)) error {
-			_, err := handle(ctx, sessionID, msg.Content, meta, func(chunk string) error {
+			currentSessionID, err := handle(ctx, "", msg.Content, meta, func(chunk string) error {
 				onChunk(chunk)
 				return nil
 			})
+			sessionID = currentSessionID
 			return err
 		})
 		if err != nil {
 			return err
 		}
-		a.sessions[decision.Key] = sessionID
 		a.base.markActivity()
 		a.append("channel.discord.message", sessionID, map[string]any{
 			"channel":   a.config.DefaultChannel,
 			"user":      msg.Author.Username,
 			"user_id":   msg.Author.ID,
 			"text":      msg.Content,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
 			"streaming": true,
 		})
 	}

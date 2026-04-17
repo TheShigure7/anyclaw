@@ -85,27 +85,16 @@ func (a *pluginChannelAdapter) pollOnce(ctx context.Context, handle channel.Inbo
 		return err
 	}
 	for _, item := range messages {
-		decision := a.router.Decide(channel.RouteRequest{Channel: a.runner.Manifest.Channel.Name, Source: item.Source, Text: item.Message})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-		sessionID, _, err := handle(ctx, sessionID, item.Message, map[string]string{"channel": a.runner.Manifest.Channel.Name, "source": item.Source, "reply_target": item.Source})
+		sessionID, _, err := handle(ctx, "", item.Message, map[string]string{"channel": a.runner.Manifest.Channel.Name, "source": item.Source, "reply_target": item.Source})
 		if err != nil {
 			return err
 		}
-		if sessionID != "" {
-			a.sessions[decision.Key] = sessionID
-		}
 		a.base.MarkActivity()
 		a.append("channel.plugin.message", sessionID, map[string]any{
-			"plugin":    a.runner.Manifest.Name,
-			"channel":   a.runner.Manifest.Channel.Name,
-			"source":    item.Source,
-			"message":   item.Message,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
+			"plugin":  a.runner.Manifest.Name,
+			"channel": a.runner.Manifest.Channel.Name,
+			"source":  item.Source,
+			"message": item.Message,
 		})
 	}
 	return nil

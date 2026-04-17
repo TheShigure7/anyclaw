@@ -18,7 +18,7 @@ import (
 	"github.com/anyclaw/anyclaw/pkg/consoleio"
 	"github.com/anyclaw/anyclaw/pkg/gateway"
 	"github.com/anyclaw/anyclaw/pkg/llm"
-	"github.com/anyclaw/anyclaw/pkg/routing"
+	modelrouting "github.com/anyclaw/anyclaw/pkg/modelrouting"
 	appRuntime "github.com/anyclaw/anyclaw/pkg/runtime"
 	"github.com/anyclaw/anyclaw/pkg/setup"
 	"github.com/anyclaw/anyclaw/pkg/skills"
@@ -706,7 +706,7 @@ func applyLLMRouteStable(state *RuntimeState, input string) string {
 	if state.llmClient == nil {
 		return ""
 	}
-	routeDecision := routing.DecideLLM(state.cfg.LLM, input)
+	routeDecision := modelrouting.DecideLLM(state.cfg.LLM, input)
 	providerChanged := strings.TrimSpace(routeDecision.Provider) != "" && routeDecision.Provider != state.cfg.LLM.Provider
 	modelChanged := strings.TrimSpace(routeDecision.Model) != "" && routeDecision.Model != state.cfg.LLM.Model
 

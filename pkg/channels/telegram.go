@@ -194,18 +194,9 @@ func (a *TelegramAdapter) pollOnce(ctx context.Context, runMessage InboundHandle
 				meta["caption"] = caption
 			}
 
-			decision := a.router.Decide(RouteRequest{Channel: "telegram", Source: chatID, Text: "[voice message]"})
-			sessionID := a.sessions[decision.Key]
-			if decision.SessionID != "" {
-				sessionID = decision.SessionID
-			}
-
-			sessionID, response, err := runMessage(ctx, sessionID, audioURL, meta)
+			sessionID, response, err := runMessage(ctx, "", audioURL, meta)
 			if err != nil {
 				return err
-			}
-			if sessionID != "" {
-				a.sessions[decision.Key] = sessionID
 			}
 			if err := a.sendMessage(ctx, chatID, response); err != nil {
 				return err
@@ -216,9 +207,6 @@ func (a *TelegramAdapter) pollOnce(ctx context.Context, runMessage InboundHandle
 				"message_type": messageType,
 				"audio_url":    audioURL,
 				"audio_mime":   audioMIME,
-				"route":        decision.Key,
-				"agent":        decision.Agent,
-				"workspace":    decision.Workspace,
 			})
 			continue
 		}
@@ -227,29 +215,17 @@ func (a *TelegramAdapter) pollOnce(ctx context.Context, runMessage InboundHandle
 			continue
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "telegram", Source: chatID, Text: text})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-
-		sessionID, response, err := runMessage(ctx, sessionID, text, meta)
+		sessionID, response, err := runMessage(ctx, "", text, meta)
 		if err != nil {
 			return err
-		}
-		if sessionID != "" {
-			a.sessions[decision.Key] = sessionID
 		}
 		if err := a.sendMessage(ctx, chatID, response); err != nil {
 			return err
 		}
 		a.base.markActivity()
 		a.append("channel.telegram.message", sessionID, map[string]any{
-			"chat_id":   chatID,
-			"text":      text,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
+			"chat_id": chatID,
+			"text":    text,
 		})
 	}
 	return nil
@@ -501,34 +477,24 @@ func (a *TelegramAdapter) pollOnceStream(ctx context.Context, handle StreamChunk
 			"sender":       username,
 		}
 
-		decision := a.router.Decide(RouteRequest{Channel: "telegram", Source: chatID, Text: text})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-
+		var sessionID string
 		var responseText string
 		err := a.sendStreamingMessage(ctx, chatID, func(onChunk func(chunk string)) error {
-			_, err := handle(ctx, sessionID, text, meta, func(chunk string) error {
+			currentSessionID, err := handle(ctx, "", text, meta, func(chunk string) error {
 				onChunk(chunk)
 				responseText += chunk
 				return nil
 			})
+			sessionID = currentSessionID
 			return err
 		})
 		if err != nil {
 			return err
 		}
-		if responseText != "" {
-			a.sessions[decision.Key] = sessionID
-		}
 		a.base.markActivity()
 		a.append("channel.telegram.message", sessionID, map[string]any{
 			"chat_id":   chatID,
 			"text":      text,
-			"route":     decision.Key,
-			"agent":     decision.Agent,
-			"workspace": decision.Workspace,
 			"streaming": true,
 		})
 	}

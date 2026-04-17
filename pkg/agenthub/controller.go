@@ -11,6 +11,7 @@ import (
 	"github.com/anyclaw/anyclaw/pkg/config"
 	"github.com/anyclaw/anyclaw/pkg/memory"
 	"github.com/anyclaw/anyclaw/pkg/prompt"
+	handoffrouting "github.com/anyclaw/anyclaw/pkg/routing/handoff"
 	"github.com/anyclaw/anyclaw/pkg/skills"
 	"github.com/anyclaw/anyclaw/pkg/tools"
 )
@@ -92,40 +93,60 @@ func (c *MainController) Run(ctx context.Context, req RunRequest) (*RunResult, e
 	}
 
 	traces := []DelegationTrace{}
-	if !req.SkipDelegation && delegation.PersistentSubagentFirst && persistentSubagents != nil {
-		if subagent, reason, ok := persistentSubagents.Match(input, req.PreferredPersistentSubagent); ok {
-			started := time.Now().UTC()
-			subagentResult, activities, err := persistentSubagents.Run(ctx, subagent.ID, req.SessionID, history, historyProvided, input)
-			completed := time.Now().UTC()
-			trace := DelegationTrace{
-				Kind:          "persistent_subagent",
-				AgentID:       subagent.ID,
-				DisplayName:   subagent.DisplayName,
-				Status:        "completed",
-				Reason:        reason,
-				ResultSummary: summarizeText(subagentResult, 180),
-				StartedAt:     started,
-				CompletedAt:   completed,
-				Duration:      completed.Sub(started),
-			}
-			if err == nil {
-				publicResponse := c.finalizePersistentSubagentResult(subagent, subagentResult)
-				c.syncMainConversation(req.SessionID, input, publicResponse)
-				return &RunResult{
-					Content:         publicResponse,
-					Source:          "persistent_subagent",
-					SourceID:        subagent.ID,
-					ToolActivities:  activities,
-					DelegationTrace: append(traces, trace),
-				}, nil
-			}
-			trace.Status = "failed"
-			trace.Error = err.Error()
-			traces = append(traces, trace)
+	handoffRouter := handoffrouting.NewRouter(persistentMatcherAdapter{registry: persistentSubagents})
+	handoffRequest := handoffRouter.Prepare(handoffrouting.HandoffRoutingEntry{
+		SessionID:           req.SessionID,
+		UserInput:           input,
+		PreferredSubagentID: req.PreferredPersistentSubagent,
+		SkipDelegation:      req.SkipDelegation,
+	})
+	plan := handoffRouter.Plan(handoffRequest, handoffrouting.PlanOptions{
+		PersistentFirst: delegation.PersistentSubagentFirst,
+		AllowTemporary:  delegation.AllowTemporarySubagents,
+	})
+
+	if plan.Mode == "persistent_subagent" && persistentSubagents != nil && strings.TrimSpace(plan.TargetAgentID) != "" {
+		started := time.Now().UTC()
+		subagentResult, activities, err := persistentSubagents.Run(ctx, plan.TargetAgentID, req.SessionID, history, historyProvided, input)
+		completed := time.Now().UTC()
+		view, _ := persistentSubagents.Get(plan.TargetAgentID)
+		displayName := strings.TrimSpace(view.DisplayName)
+		if displayName == "" {
+			displayName = strings.TrimSpace(plan.TargetAgentID)
 		}
+		trace := DelegationTrace{
+			Kind:          "persistent_subagent",
+			AgentID:       plan.TargetAgentID,
+			DisplayName:   displayName,
+			Status:        "completed",
+			Reason:        plan.Reason,
+			ResultSummary: summarizeText(subagentResult, 180),
+			StartedAt:     started,
+			CompletedAt:   completed,
+			Duration:      completed.Sub(started),
+		}
+		if err == nil {
+			publicResponse := c.finalizePersistentSubagentResult(view, subagentResult)
+			c.syncMainConversation(req.SessionID, input, publicResponse)
+			return &RunResult{
+				Content:         publicResponse,
+				Source:          "persistent_subagent",
+				SourceID:        plan.TargetAgentID,
+				ToolActivities:  activities,
+				DelegationTrace: append(traces, trace),
+			}, nil
+		}
+		trace.Status = "failed"
+		trace.Error = err.Error()
+		traces = append(traces, trace)
 	}
 
-	if !req.SkipDelegation && delegation.AllowTemporarySubagents && temporarySubagents != nil {
+	shouldRunTemporary := plan.Mode == "temporary_subagent" || (plan.Mode == "persistent_subagent" && delegation.AllowTemporarySubagents)
+	if shouldRunTemporary && temporarySubagents != nil {
+		reason := plan.Reason
+		if plan.Mode == "persistent_subagent" {
+			reason = "fallback after persistent subagent failure"
+		}
 		started := time.Now().UTC()
 		subagentResult, activities, subagentID, err := temporarySubagents.Run(ctx, req.SessionID, history, historyProvided, input)
 		completed := time.Now().UTC()
@@ -134,7 +155,7 @@ func (c *MainController) Run(ctx context.Context, req RunRequest) (*RunResult, e
 			AgentID:       subagentID,
 			DisplayName:   "Temporary Subagent Worker",
 			Status:        "completed",
-			Reason:        "fallback to temporary subagent",
+			Reason:        reason,
 			ResultSummary: summarizeText(subagentResult, 180),
 			StartedAt:     started,
 			CompletedAt:   completed,
@@ -167,6 +188,25 @@ func (c *MainController) Run(ctx context.Context, req RunRequest) (*RunResult, e
 		ToolActivities:  activities,
 		DelegationTrace: traces,
 	}, nil
+}
+
+type persistentMatcherAdapter struct {
+	registry *PersistentSubagentRegistry
+}
+
+func (a persistentMatcherAdapter) Match(input string, preferred string) (handoffrouting.PersistentMatch, bool) {
+	if a.registry == nil {
+		return handoffrouting.PersistentMatch{}, false
+	}
+	subagent, reason, ok := a.registry.Match(input, preferred)
+	if !ok {
+		return handoffrouting.PersistentMatch{}, false
+	}
+	return handoffrouting.PersistentMatch{
+		AgentID:     subagent.ID,
+		DisplayName: subagent.DisplayName,
+		Reason:      reason,
+	}, true
 }
 
 func (c *MainController) ClearSession(sessionID string) {

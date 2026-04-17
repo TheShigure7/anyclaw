@@ -142,17 +142,9 @@ func (a *SignalAdapter) pollOnce(ctx context.Context, handle InboundHandler) err
 				meta["caption"] = msg
 			}
 
-			decision := a.router.Decide(RouteRequest{Channel: "signal", Source: item.Envelope.Source, Text: "[voice message]"})
-			sessionID := a.sessions[decision.Key]
-			if decision.SessionID != "" {
-				sessionID = decision.SessionID
-			}
-			sessionID, response, err := handle(ctx, sessionID, audioURL, meta)
+			sessionID, response, err := handle(ctx, "", audioURL, meta)
 			if err != nil {
 				return err
-			}
-			if sessionID != "" {
-				a.sessions[decision.Key] = sessionID
 			}
 			if err := a.sendMessage(ctx, replyTarget, response); err != nil {
 				return err
@@ -165,9 +157,6 @@ func (a *SignalAdapter) pollOnce(ctx context.Context, handle InboundHandler) err
 				"message_type": "voice_note",
 				"audio_url":    audioURL,
 				"audio_mime":   audioMIME,
-				"route":        decision.Key,
-				"agent":        decision.Agent,
-				"workspace":    decision.Workspace,
 			})
 			continue
 		}
@@ -179,17 +168,9 @@ func (a *SignalAdapter) pollOnce(ctx context.Context, handle InboundHandler) err
 		if len(item.Envelope.DataMessage.Attachments) > 0 {
 			meta["attachment_count"] = fmt.Sprintf("%d", len(item.Envelope.DataMessage.Attachments))
 		}
-		decision := a.router.Decide(RouteRequest{Channel: "signal", Source: item.Envelope.Source, Text: msg})
-		sessionID := a.sessions[decision.Key]
-		if decision.SessionID != "" {
-			sessionID = decision.SessionID
-		}
-		sessionID, response, err := handle(ctx, sessionID, msg, meta)
+		sessionID, response, err := handle(ctx, "", msg, meta)
 		if err != nil {
 			return err
-		}
-		if sessionID != "" {
-			a.sessions[decision.Key] = sessionID
 		}
 		if err := a.sendMessage(ctx, replyTarget, response); err != nil {
 			return err
@@ -201,9 +182,6 @@ func (a *SignalAdapter) pollOnce(ctx context.Context, handle InboundHandler) err
 			"group_id":    threadID,
 			"attachments": len(item.Envelope.DataMessage.Attachments),
 			"text":        msg,
-			"route":       decision.Key,
-			"agent":       decision.Agent,
-			"workspace":   decision.Workspace,
 		})
 	}
 	return nil

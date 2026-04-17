@@ -10,25 +10,27 @@ import (
 	"time"
 
 	"github.com/anyclaw/anyclaw/pkg/agent"
-	"github.com/anyclaw/anyclaw/pkg/agenthub"
 	"github.com/anyclaw/anyclaw/pkg/apps"
 	appstate "github.com/anyclaw/anyclaw/pkg/apps"
 	"github.com/anyclaw/anyclaw/pkg/config"
+	dispatchsvc "github.com/anyclaw/anyclaw/pkg/dispatch"
 	"github.com/anyclaw/anyclaw/pkg/llm"
 	"github.com/anyclaw/anyclaw/pkg/plugin"
 	"github.com/anyclaw/anyclaw/pkg/prompt"
-	"github.com/anyclaw/anyclaw/pkg/routing"
+	appRuntime "github.com/anyclaw/anyclaw/pkg/runtime"
+	taskrouting "github.com/anyclaw/anyclaw/pkg/taskrouting"
 	"github.com/anyclaw/anyclaw/pkg/tools"
 )
 
 type TaskManager struct {
 	store       *Store
-	sessions    *SessionManager
+	sessions    taskSessionStore
 	runtimePool *RuntimePool
+	dispatcher  *dispatchsvc.TaskService
 	app         taskAppInfo
 	planner     taskPlanner
 	approvals   *approvalManager
-	router      *routing.Router
+	router      *taskrouting.Router
 	registry    *plugin.Registry
 	nextID      func(prefix string) string
 	nowFunc     func() time.Time
@@ -43,6 +45,14 @@ type taskAppInfo struct {
 type taskPlanner interface {
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.ToolDefinition) (*llm.Response, error)
 	Name() string
+}
+
+type taskSessionStore interface {
+	Get(id string) (*Session, bool)
+	CreateWithOptions(opts SessionCreateOptions) (*Session, error)
+	EnqueueTurn(sessionID string) (*Session, error)
+	SetPresence(sessionID string, presence string, typing bool) (*Session, error)
+	AddExchange(sessionID string, userText string, assistantText string) (*Session, error)
 }
 
 type TaskCreateOptions struct {
@@ -86,16 +96,20 @@ const (
 	taskArtifactLimit = 64
 )
 
-func NewTaskManager(store *Store, sessions *SessionManager, runtimePool *RuntimePool, app taskAppInfo, planner taskPlanner, approvals *approvalManager, router *routing.Router, registry *plugin.Registry) *TaskManager {
+func NewTaskManager(store *Store, sessions taskSessionStore, runtimePool *RuntimePool, app taskAppInfo, planner taskPlanner, approvals *approvalManager, router *taskrouting.Router, registry *plugin.Registry) *TaskManager {
 	return &TaskManager{
 		store:       store,
 		sessions:    sessions,
 		runtimePool: runtimePool,
-		app:         app,
-		planner:     planner,
-		approvals:   approvals,
-		router:      router,
-		registry:    registry,
+		dispatcher: &dispatchsvc.TaskService{
+			Sessions:    taskDispatchSessionStoreAdapter{sessions: sessions},
+			RuntimePool: runtimePool,
+		},
+		app:       app,
+		planner:   planner,
+		approvals: approvals,
+		router:    router,
+		registry:  registry,
 		nextID: func(prefix string) string {
 			return uniqueID(prefix)
 		},
@@ -318,9 +332,6 @@ func (m *TaskManager) Execute(ctx context.Context, taskID string) (*TaskExecutio
 	})
 	_ = m.persistTask(task)
 
-	if _, err := m.sessions.EnqueueTurn(session.ID); err == nil {
-		session, _ = m.sessions.SetPresence(session.ID, "typing", true)
-	}
 	app, err := m.runtimePool.GetOrCreate(task.Assistant, task.Org, task.Project, task.Workspace)
 	if err != nil {
 		_ = m.failTask(task, err)
@@ -389,64 +400,24 @@ func (m *TaskManager) Execute(ctx context.Context, taskID string) (*TaskExecutio
 	if stage.execute > 0 {
 		_ = m.setStepStatus(task.ID, stage.execute, "running", "", executionStageOutput(task, workflowMatches, nil), "")
 	}
-	app.Agent.SetHistory(m.historyWithWorkflowSuggestions(session.History, workflowMatches))
-	execCtx := tools.WithBrowserSession(ctx, session.ID)
-	execCtx = tools.WithSandboxScope(execCtx, tools.SandboxScope{SessionID: session.ID, Channel: "task"})
-	execCtx = agent.WithToolApprovalHook(execCtx, m.toolApprovalHook(task, session, app.Config))
-	execCtx = tools.WithToolApprovalHook(execCtx, m.protocolApprovalHook(task, session, app.Config))
-	if task.ExecutionState != nil && task.ExecutionState.DesktopPlan != nil {
-		execCtx = appstate.WithDesktopPlanResumeState(execCtx, task.ExecutionState.DesktopPlan)
-		m.appendTaskEvidenceNoSave(task, TaskEvidence{
-			Kind:      "execution_resumed",
-			Summary:   "Task resumed from a saved desktop workflow checkpoint.",
-			Detail:    desktopPlanCheckpointDetail(task.ExecutionState.DesktopPlan),
-			StepIndex: 3,
-			Status:    task.Status,
-			ToolName:  task.ExecutionState.DesktopPlan.ToolName,
-			Source:    "desktop_plan",
-			Data: map[string]any{
-				"next_step":           task.ExecutionState.DesktopPlan.NextStep,
-				"last_completed_step": task.ExecutionState.DesktopPlan.LastCompletedStep,
-			},
-		})
-		_ = m.persistTask(task)
-	}
-	execCtx = appstate.WithDesktopPlanStateHook(execCtx, m.desktopPlanStateHook(task))
-	runResult, err := app.RunUserTask(execCtx, agenthub.RunRequest{
-		SessionID:   session.ID,
-		UserInput:   task.Input,
-		History:     m.historyWithWorkflowSuggestions(session.History, workflowMatches),
-		SyncHistory: true,
-	})
+	runResult, err := m.runTaskDispatch(ctx, task, session, app.Config, m.historyWithWorkflowSuggestions(session.History, workflowMatches))
 	if freshTask, ok := m.store.GetTask(task.ID); ok && freshTask != nil {
 		task = freshTask
 	}
-	response := ""
-	toolActivities := []agent.ToolActivity(nil)
-	if runResult != nil {
-		response = runResult.Content
-		toolActivities = runResult.ToolActivities
-	}
+	response := runResult.Response
+	toolActivities := runResult.ToolActivities
 	m.recordTaskToolActivitiesNoSave(task, toolActivities)
 	if len(toolActivities) > 0 {
 		_ = m.persistTask(task)
 	}
 	if err != nil {
 		if errors.Is(err, ErrTaskWaitingApproval) {
-			m.updateSessionPresence(session.ID, "waiting_approval", false)
-			return &TaskExecutionResult{Task: task, Session: session, ToolActivities: toolActivities}, err
+			return &TaskExecutionResult{Task: task, Session: taskSessionFromDispatchResult(runResult, session), ToolActivities: toolActivities}, err
 		}
-		m.updateSessionPresence(session.ID, "idle", false)
 		_ = m.failTask(task, err)
 		return nil, err
 	}
-	updatedSession, err := m.sessions.AddExchange(session.ID, task.Input, response)
-	if err != nil {
-		m.updateSessionPresence(session.ID, "idle", false)
-		_ = m.failTask(task, err)
-		return nil, err
-	}
-	_, _ = m.sessions.SetPresence(updatedSession.ID, "idle", false)
+	updatedSession := taskSessionFromDispatchResult(runResult, session)
 
 	task.Result = response
 	task.Status = "completed"
@@ -504,6 +475,84 @@ func (m *TaskManager) Execute(ctx context.Context, taskID string) (*TaskExecutio
 	}
 
 	return &TaskExecutionResult{Task: task, Session: updatedSession, ToolActivities: toolActivities}, nil
+}
+
+func (m *TaskManager) runTaskDispatch(ctx context.Context, task *Task, session *Session, cfg *config.Config, history []prompt.Message) (dispatchsvc.TaskRunResult, error) {
+	if m.dispatcher == nil {
+		m.dispatcher = &dispatchsvc.TaskService{
+			Sessions:    taskDispatchSessionStoreAdapter{sessions: m.sessions},
+			RuntimePool: m.runtimePool,
+		}
+	}
+	return m.dispatcher.Run(ctx, dispatchsvc.TaskRunRequest{
+		SessionID: session.ID,
+		UserInput: task.Input,
+		History:   history,
+		Channel:   "task",
+		DecorateContext: func(execCtx context.Context, request dispatchsvc.TaskRunRequest, snapshot dispatchsvc.TaskSessionSnapshot, targetApp *appRuntime.App) context.Context {
+			return m.decorateTaskDispatchContext(execCtx, task, snapshot, cfg, targetApp)
+		},
+		HandleRunError: func(request dispatchsvc.TaskRunRequest, snapshot dispatchsvc.TaskSessionSnapshot, err error) {
+			m.handleTaskDispatchRunError(snapshot, err)
+		},
+	})
+}
+
+func (m *TaskManager) decorateTaskDispatchContext(ctx context.Context, task *Task, snapshot dispatchsvc.TaskSessionSnapshot, cfg *config.Config, _ *appRuntime.App) context.Context {
+	session := taskSessionFromDispatchSnapshot(snapshot)
+	ctx = agent.WithToolApprovalHook(ctx, m.toolApprovalHook(task, session, cfg))
+	ctx = tools.WithToolApprovalHook(ctx, m.protocolApprovalHook(task, session, cfg))
+	if task.ExecutionState != nil && task.ExecutionState.DesktopPlan != nil {
+		ctx = appstate.WithDesktopPlanResumeState(ctx, task.ExecutionState.DesktopPlan)
+		m.appendTaskEvidenceNoSave(task, TaskEvidence{
+			Kind:      "execution_resumed",
+			Summary:   "Task resumed from a saved desktop workflow checkpoint.",
+			Detail:    desktopPlanCheckpointDetail(task.ExecutionState.DesktopPlan),
+			StepIndex: 3,
+			Status:    task.Status,
+			ToolName:  task.ExecutionState.DesktopPlan.ToolName,
+			Source:    "desktop_plan",
+			Data: map[string]any{
+				"next_step":           task.ExecutionState.DesktopPlan.NextStep,
+				"last_completed_step": task.ExecutionState.DesktopPlan.LastCompletedStep,
+			},
+		})
+		_ = m.persistTask(task)
+	}
+	return appstate.WithDesktopPlanStateHook(ctx, m.desktopPlanStateHook(task))
+}
+
+func (m *TaskManager) handleTaskDispatchRunError(snapshot dispatchsvc.TaskSessionSnapshot, err error) {
+	sessionID := strings.TrimSpace(snapshot.ID)
+	if sessionID == "" {
+		return
+	}
+	if errors.Is(err, ErrTaskWaitingApproval) {
+		m.updateSessionPresence(sessionID, "waiting_approval", false)
+		return
+	}
+	m.updateSessionPresence(sessionID, "idle", false)
+}
+
+func taskSessionFromDispatchResult(result dispatchsvc.TaskRunResult, fallback *Session) *Session {
+	if session := taskSessionFromDispatchSnapshot(result.Session); session != nil {
+		return session
+	}
+	return fallback
+}
+
+func taskSessionFromDispatchSnapshot(snapshot dispatchsvc.TaskSessionSnapshot) *Session {
+	if strings.TrimSpace(snapshot.ID) == "" {
+		return nil
+	}
+	return &Session{
+		ID:        snapshot.ID,
+		Agent:     snapshot.Agent,
+		Org:       snapshot.Org,
+		Project:   snapshot.Project,
+		Workspace: snapshot.Workspace,
+		History:   append([]prompt.Message(nil), snapshot.History...),
+	}
 }
 
 func (m *TaskManager) executionMode(task *Task) taskExecutionMode {
@@ -1434,8 +1483,8 @@ func limitTaskText(input string, max int) string {
 	return trimmed[:max-3] + "..."
 }
 
-func (m *TaskManager) routeWithLowToken(ctx context.Context, input string) *routing.RouteResult {
-	intent := routing.TaskIntent{
+func (m *TaskManager) routeWithLowToken(ctx context.Context, input string) *taskrouting.RouteResult {
+	intent := taskrouting.TaskIntent{
 		ID:        m.nextID("intent"),
 		Input:     input,
 		CreatedAt: time.Now().UTC(),
@@ -1447,7 +1496,7 @@ func (m *TaskManager) routeWithLowToken(ctx context.Context, input string) *rout
 	return nil
 }
 
-func (m *TaskManager) buildPlanFromRouteResult(result *routing.RouteResult) (string, []plannedStep) {
+func (m *TaskManager) buildPlanFromRouteResult(result *taskrouting.RouteResult) (string, []plannedStep) {
 	var steps []plannedStep
 	summary := result.Explanation
 

@@ -67,12 +67,6 @@ func (a *WhatsAppAdapter) HandleInboundWithMeta(ctx context.Context, source stri
 	if a.seen(messageID) {
 		return "", "", nil
 	}
-	decision := a.router.Decide(RouteRequest{Channel: "whatsapp", Source: source, Text: text})
-	sessionID := a.sessions[decision.Key]
-	if decision.SessionID != "" {
-		sessionID = decision.SessionID
-	}
-	a.replyTargets[decision.Key] = source
 
 	if meta == nil {
 		meta = map[string]string{}
@@ -84,23 +78,17 @@ func (a *WhatsAppAdapter) HandleInboundWithMeta(ctx context.Context, source stri
 	meta["message_id"] = messageID
 	meta["sender"] = profileName
 
-	sessionID, response, err := handle(ctx, sessionID, text, meta)
+	sessionID, response, err := handle(ctx, "", text, meta)
 	if err != nil {
 		return "", "", err
-	}
-	if sessionID != "" {
-		a.sessions[decision.Key] = sessionID
 	}
 	if err := a.sendMessage(ctx, source, response); err != nil {
 		return "", "", err
 	}
 	a.base.markActivity()
 	a.append("channel.whatsapp.message", sessionID, map[string]any{
-		"source":    source,
-		"text":      text,
-		"route":     decision.Key,
-		"agent":     decision.Agent,
-		"workspace": decision.Workspace,
+		"source": source,
+		"text":   text,
 	})
 	return sessionID, response, nil
 }

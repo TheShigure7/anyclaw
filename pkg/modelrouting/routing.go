@@ -1,4 +1,4 @@
-package routing
+package modelrouting
 
 import (
 	"strings"

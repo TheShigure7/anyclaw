@@ -39,7 +39,7 @@ AnyClaw 的模块划分遵循以下原则：
 | M6 | Multi-Agent 编排模块 | `pkg/orchestrator/`, `pkg/agents/`, `pkg/agentstore/` | 任务分解、子任务依赖调度、子代理池、结果汇总 |
 | M7 | Tool / Skill 执行模块 | `pkg/tools/`, `pkg/skills/` | 内置工具注册执行、技能装载、策略校验、沙箱与能力回传 |
 | M8 | Plugin / App / CLIHub / MCP 扩展模块 | `pkg/plugin/`, `pkg/apps/`, `pkg/clihub/`, `pkg/mcp/` | 插件发现与信任校验、App Connector、工作流匹配、CLI Harness、MCP 服务 |
-| M9 | 状态与数据模块 | `pkg/memory/`, `pkg/qmd/`, `pkg/session/`, `./.anyclaw/`, `workflows/memory/` | 记忆、会话、结构化状态、运行时文件和本地持久化 |
+| M9 | 状态与数据模块 | `pkg/memory/`, `pkg/qmd/`, `pkg/sessionstore/`, `./.anyclaw/`, `workflows/memory/` | 记忆、会话、结构化状态、运行时文件和本地持久化 |
 | M10 | 模型提供商与路由模块 | `pkg/llm/`, `pkg/providers/`, `pkg/routing/` | Provider 适配、模型切换、流式返回、路由决策、统一消息协议 |
 | M11 | 安全、Secrets 与审计模块 | `pkg/security/`, `pkg/secrets/`, `pkg/audit/`, `pkg/tools` 中 policy/sandbox | 权限、密钥、危险操作保护、审计日志、受保护路径、审批前置 |
 | M12 | 自动化与运维模块 | `pkg/cron/`, `cmd/anyclaw/status_cli.go`, `cmd/anyclaw/cron_cli.go` 等 | 定时任务、健康检查、状态查询、审批处理、运维观察面 |
@@ -560,7 +560,7 @@ sequenceDiagram
 
 - `pkg/memory/`
 - `pkg/qmd/`
-- `pkg/session/`
+- `pkg/sessionstore/`
 - `./.anyclaw/`
 - `workflows/memory/`
 - `pkg/apps/store.go` 等本地状态文件

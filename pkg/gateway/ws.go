@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/anyclaw/anyclaw/pkg/config"
+	coreingress "github.com/anyclaw/anyclaw/pkg/ingress"
 	"github.com/gorilla/websocket"
 )
 
@@ -840,11 +841,12 @@ func (s *Server) wsChatSend(ctx context.Context, user *AuthUser, params map[stri
 	}
 	title := mapString(params, "title")
 	sessionID := sessionIDParam(params)
+	tenantRef := coreingress.TenantRef{}
+	assistantName, err := s.resolveAgentName(firstNonEmpty(mapString(params, "agent"), mapString(params, "assistant")))
+	if err != nil {
+		return nil, err
+	}
 	if sessionID == "" {
-		assistantName, err := s.resolveAgentName(firstNonEmpty(mapString(params, "agent"), mapString(params, "assistant")))
-		if err != nil {
-			return nil, err
-		}
 		orgID := mapString(params, "org")
 		projectID := mapString(params, "project")
 		workspaceID := firstNonEmpty(mapString(params, "workspace"), mapString(params, "workspace_id"))
@@ -858,20 +860,11 @@ func (s *Server) wsChatSend(ctx context.Context, user *AuthUser, params map[stri
 		if !HasHierarchyAccess(user, org.ID, project.ID, workspace.ID) {
 			return nil, fmt.Errorf("forbidden")
 		}
-		session, err := s.sessions.CreateWithOptions(SessionCreateOptions{
-			Title:       title,
-			AgentName:   assistantName,
-			Org:         org.ID,
-			Project:     project.ID,
-			Workspace:   workspace.ID,
-			SessionMode: "main",
-			QueueMode:   "fifo",
-		})
-		if err != nil {
-			return nil, err
+		tenantRef = coreingress.TenantRef{
+			OrgID:       org.ID,
+			ProjectID:   project.ID,
+			WorkspaceID: workspace.ID,
 		}
-		sessionID = session.ID
-		s.appendEvent("session.created", session.ID, map[string]any{"title": session.Title, "org": session.Org, "project": session.Project, "workspace": session.Workspace})
 	} else {
 		session, ok := s.sessions.Get(sessionID)
 		if !ok {
@@ -881,19 +874,30 @@ func (s *Server) wsChatSend(ctx context.Context, user *AuthUser, params map[stri
 			return nil, fmt.Errorf("forbidden")
 		}
 	}
-	response, updatedSession, err := s.runSessionMessage(ctx, sessionID, title, message)
+	result, err := s.dispatchControlPlaneMessage(ctx, controlPlaneMessageRequest{
+		SourceType:       "ws",
+		EntryPoint:       "chat.send",
+		User:             user,
+		Message:          message,
+		SessionID:        sessionID,
+		Title:            title,
+		RequestedAgentID: assistantName,
+		Tenant:           tenantRef,
+		Metadata:         map[string]string{"transport": "ws"},
+	})
 	if err != nil {
 		if errors.Is(err, ErrTaskWaitingApproval) {
+			sessionID = firstNonEmpty(result.Session.ID, sessionID)
 			s.appendAudit(user, "chat.send", sessionID, map[string]any{"message_length": len(message), "transport": "ws", "status": "waiting_approval"})
 			return s.sessionApprovalResponse(sessionID), nil
 		}
 		return nil, err
 	}
-	s.appendAudit(user, "chat.send", updatedSession.ID, map[string]any{"message_length": len(message), "transport": "ws"})
+	s.appendAudit(user, "chat.send", result.Session.ID, map[string]any{"message_length": len(message), "transport": "ws"})
 	return map[string]any{
-		"response":    response,
-		"session":     updatedSession,
-		"session_key": updatedSession.ID,
+		"response":    result.Response,
+		"session":     result.Session,
+		"session_key": result.Session.ID,
 	}, nil
 }
 
