@@ -35,13 +35,16 @@ func AnalyzeRouting(cfg config.RoutingConfig) []RuleWarning {
 }
 
 func sameRule(a, b config.ChannelRoutingRule) bool {
+	aReplyBack := a.ReplyBack != nil && *a.ReplyBack
+	bReplyBack := b.ReplyBack != nil && *b.ReplyBack
+
 	return a.Channel == b.Channel &&
 		a.Match == b.Match &&
 		a.SessionMode == b.SessionMode &&
 		a.SessionID == b.SessionID &&
 		a.QueueMode == b.QueueMode &&
 		a.TitlePrefix == b.TitlePrefix &&
-		replyBackValue(a.ReplyBack) == replyBackValue(b.ReplyBack)
+		aReplyBack == bReplyBack
 }
 
 func shadows(a, b config.ChannelRoutingRule) bool {
@@ -55,8 +58,4 @@ func shadows(a, b config.ChannelRoutingRule) bool {
 		return true
 	}
 	return false
-}
-
-func replyBackValue(value *bool) bool {
-	return value != nil && *value
 }
