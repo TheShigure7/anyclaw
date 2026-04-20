@@ -343,6 +343,64 @@ func TestStoreWithEncryption(t *testing.T) {
 	}
 }
 
+func TestEncryptedStoreVersionHistoryStaysPlaintextInMemory(t *testing.T) {
+	key, err := GenerateEncryptionKey()
+	if err != nil {
+		t.Fatalf("GenerateEncryptionKey failed: %v", err)
+	}
+
+	cfg := DefaultStoreConfig()
+	cfg.EncryptionKey = key
+
+	store, cleanup := setupTestStore(t, cfg)
+	defer cleanup()
+
+	if err := store.RecordRotation("api_key", 0, 1, "v2", "admin", map[string]string{"step": "1"}); err != nil {
+		t.Fatalf("RecordRotation v1 failed: %v", err)
+	}
+
+	vh, ok := store.GetVersionHistory("api_key")
+	if !ok {
+		t.Fatal("expected version history to exist")
+	}
+	if len(vh.Versions) != 1 {
+		t.Fatalf("expected 1 version, got %d", len(vh.Versions))
+	}
+	if vh.Versions[0].Value != "v2" {
+		t.Fatalf("expected plaintext version value 'v2', got '%s'", vh.Versions[0].Value)
+	}
+
+	if err := store.RecordRotation("api_key", 1, 2, "v3", "admin", map[string]string{"step": "2"}); err != nil {
+		t.Fatalf("RecordRotation v2 failed: %v", err)
+	}
+
+	vh, ok = store.GetVersionHistory("api_key")
+	if !ok {
+		t.Fatal("expected version history after second rotation")
+	}
+	if len(vh.Versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(vh.Versions))
+	}
+	if vh.Versions[0].Value != "v2" {
+		t.Errorf("expected first version plaintext 'v2', got '%s'", vh.Versions[0].Value)
+	}
+	if vh.Versions[1].Value != "v3" {
+		t.Errorf("expected second version plaintext 'v3', got '%s'", vh.Versions[1].Value)
+	}
+
+	if err := store.RollbackVersion("api_key", 1, "admin"); err != nil {
+		t.Fatalf("RollbackVersion failed: %v", err)
+	}
+
+	active, ok := store.GetActiveVersion("api_key")
+	if !ok {
+		t.Fatal("expected active version after rollback")
+	}
+	if active.Value != "v2" {
+		t.Errorf("expected active plaintext value 'v2' after rollback, got '%s'", active.Value)
+	}
+}
+
 func TestRuntimeSnapshot(t *testing.T) {
 	secrets := map[string]*SecretEntry{
 		"db_password": {
