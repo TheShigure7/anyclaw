@@ -65,12 +65,13 @@ func TestDualMemorySearch(t *testing.T) {
 
 func TestDualMemoryConversationHistory(t *testing.T) {
 	dm := setupDualMemory(t)
+	svc := NewMemoryService(dm)
 
 	dm.Add(MemoryEntry{Type: TypeConversation, Role: "user", Content: "Hello"})
 	dm.Add(MemoryEntry{Type: TypeConversation, Role: "assistant", Content: "Hi there"})
 	dm.Add(MemoryEntry{Type: TypeFact, Content: "Fact not conversation"})
 
-	history, err := dm.GetConversationHistory(10)
+	history, err := svc.GetConversationHistory(10)
 	if err != nil {
 		t.Fatalf("failed to get conversation history: %v", err)
 	}
@@ -82,12 +83,13 @@ func TestDualMemoryConversationHistory(t *testing.T) {
 
 func TestDualMemoryStats(t *testing.T) {
 	dm := setupDualMemory(t)
+	svc := NewMemoryService(dm)
 
 	dm.Add(MemoryEntry{Type: TypeConversation, Content: "conv1"})
 	dm.Add(MemoryEntry{Type: TypeFact, Content: "fact1"})
 	dm.Add(MemoryEntry{Type: TypeReflection, Content: "reflect1"})
 
-	stats, err := dm.GetStats()
+	stats, err := svc.GetStats()
 	if err != nil {
 		t.Fatalf("failed to get stats: %v", err)
 	}
@@ -270,7 +272,7 @@ func TestSQLiteMemoryDirect(t *testing.T) {
 		t.Errorf("expected 1 search result, got %d", len(results))
 	}
 
-	stats, err := mem.GetStats()
+	stats, err := NewMemoryService(mem).GetStats()
 	if err != nil {
 		t.Fatalf("failed to get stats: %v", err)
 	}

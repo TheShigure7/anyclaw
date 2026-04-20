@@ -439,66 +439,6 @@ func (m *SQLiteMemory) List() ([]MemoryEntry, error) {
 	return entries, nil
 }
 
-func (m *SQLiteMemory) GetConversationHistory(limit int) ([]MemoryEntry, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var rows *sql.Rows
-	var err error
-
-	if limit > 0 {
-		rows, err = m.db.QueryContext(m.ctx,
-			`SELECT id, timestamp, type, role, content, metadata FROM memories WHERE type = 'conversation' ORDER BY timestamp ASC LIMIT ?`,
-			limit)
-	} else {
-		rows, err = m.db.QueryContext(m.ctx,
-			`SELECT id, timestamp, type, role, content, metadata FROM memories WHERE type = 'conversation' ORDER BY timestamp ASC`)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []MemoryEntry
-	for rows.Next() {
-		entry, err := scanMemoryRow(rows)
-		if err != nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	return entries, nil
-}
-
-func (m *SQLiteMemory) AddReflection(content string, metadata map[string]string) error {
-	return m.Add(MemoryEntry{Type: TypeReflection, Content: content, Metadata: metadata})
-}
-
-func (m *SQLiteMemory) AddFact(content string, metadata map[string]string) error {
-	return m.Add(MemoryEntry{Type: TypeFact, Content: content, Metadata: metadata})
-}
-
-func (m *SQLiteMemory) FormatAsMarkdown() (string, error) {
-	entries, err := m.List()
-	if err != nil {
-		return "", err
-	}
-
-	if len(entries) == 0 {
-		return "# Memory\n\n(No entries)", nil
-	}
-
-	var sb strings.Builder
-	sb.WriteString("# Memory\n\n")
-
-	for _, entry := range entries {
-		sb.WriteString(fmt.Sprintf("## [%s] %s - %s\n\n%s\n\n",
-			entry.Type, entry.ID, entry.Timestamp.Format("2006-01-02 15:04"), entry.Content))
-	}
-
-	return sb.String(), nil
-}
-
 func (m *SQLiteMemory) Delete(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -506,35 +446,6 @@ func (m *SQLiteMemory) Delete(id string) error {
 	m.db.ExecContext(m.ctx, `DELETE FROM memories WHERE id = ?`, id)
 	m.db.ExecContext(m.ctx, `DELETE FROM vec_memories WHERE memory_id = ?`, id)
 	return nil
-}
-
-func (m *SQLiteMemory) GetStats() (map[string]int, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	stats := make(map[string]int)
-
-	var total int
-	m.db.QueryRowContext(m.ctx, `SELECT COUNT(*) FROM memories`).Scan(&total)
-	stats["total"] = total
-
-	var conversations int
-	m.db.QueryRowContext(m.ctx, `SELECT COUNT(*) FROM memories WHERE type = 'conversation'`).Scan(&conversations)
-	stats["conversations"] = conversations
-
-	var reflections int
-	m.db.QueryRowContext(m.ctx, `SELECT COUNT(*) FROM memories WHERE type = 'reflection'`).Scan(&reflections)
-	stats["reflections"] = reflections
-
-	var facts int
-	m.db.QueryRowContext(m.ctx, `SELECT COUNT(*) FROM memories WHERE type = 'fact'`).Scan(&facts)
-	stats["facts"] = facts
-
-	var embeddings int
-	m.db.QueryRowContext(m.ctx, `SELECT COUNT(*) FROM vec_memories`).Scan(&embeddings)
-	stats["embeddings"] = embeddings
-
-	return stats, nil
 }
 
 func (m *SQLiteMemory) Close() error {

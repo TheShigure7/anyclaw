@@ -29,11 +29,6 @@ type MemoryBackend interface {
 	Delete(id string) error
 	List() ([]MemoryEntry, error)
 	Search(query string, limit int) ([]MemoryEntry, error)
-	GetConversationHistory(limit int) ([]MemoryEntry, error)
-	AddReflection(content string, metadata map[string]string) error
-	AddFact(content string, metadata map[string]string) error
-	FormatAsMarkdown() (string, error)
-	GetStats() (map[string]int, error)
 	Close() error
 }
 
