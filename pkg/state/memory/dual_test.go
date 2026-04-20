@@ -202,13 +202,9 @@ func TestMemoryBackendFactory(t *testing.T) {
 		WorkDir: dir,
 	}
 	backend, err = NewMemoryBackend(cfg)
-	if err != nil {
-		t.Fatalf("failed to create dual backend: %v", err)
+	if err == nil {
+		t.Fatal("expected generic factory to reject dual backend")
 	}
-	if _, ok := backend.(*DualMemory); !ok {
-		t.Error("expected DualMemory backend")
-	}
-	backend.Close()
 }
 
 func TestMigrateFileToSQLite(t *testing.T) {

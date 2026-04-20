@@ -20,14 +20,17 @@ import (
 type SQLiteMemory struct {
 	db      *sql.DB
 	baseDir string
+	dsn     string
 	mu      sync.RWMutex
 	ctx     context.Context
 
 	embedder   EmbeddingProvider
 	dimensions int
 
-	cache      *SearchCache
-	warmupDone bool
+	cache       *SearchCache
+	warmupDone  bool
+	maxOpen     int
+	busyTimeout time.Duration
 }
 
 type SQLiteMemoryOption func(*SQLiteMemory)
@@ -47,11 +50,34 @@ func WithCache(cfg CacheConfig) SQLiteMemoryOption {
 	}
 }
 
+func WithMaxOpenConns(maxOpen int) SQLiteMemoryOption {
+	return func(m *SQLiteMemory) {
+		if maxOpen > 0 {
+			m.maxOpen = maxOpen
+		}
+	}
+}
+
+func WithBusyTimeout(timeout time.Duration) SQLiteMemoryOption {
+	return func(m *SQLiteMemory) {
+		if timeout > 0 {
+			m.busyTimeout = timeout
+		}
+	}
+}
+
 func NewSQLiteMemory(workDir string, dsn string, opts ...SQLiteMemoryOption) (*SQLiteMemory, error) {
 	if dsn == "" {
-		dsn = workDir + "/memory.db"
+		dsn = filepath.Join(workDir, "memory.db")
 	}
-	m := &SQLiteMemory{baseDir: workDir, ctx: context.Background(), dimensions: 1536}
+	m := &SQLiteMemory{
+		baseDir:     workDir,
+		dsn:         dsn,
+		ctx:         context.Background(),
+		dimensions:  1536,
+		maxOpen:     1,
+		busyTimeout: 30 * time.Second,
+	}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -59,7 +85,7 @@ func NewSQLiteMemory(workDir string, dsn string, opts ...SQLiteMemoryOption) (*S
 }
 
 func (m *SQLiteMemory) Init() error {
-	return m.InitWithDSN("")
+	return m.InitWithDSN(m.dsn)
 }
 
 func (m *SQLiteMemory) InitWithDSN(dsn string) error {
@@ -67,20 +93,33 @@ func (m *SQLiteMemory) InitWithDSN(dsn string) error {
 	defer m.mu.Unlock()
 
 	if dsn == "" {
-		dsn = m.baseDir + "/memory.db"
+		dsn = m.dsn
 	}
+	if dsn == "" {
+		dsn = filepath.Join(m.baseDir, "memory.db")
+	}
+	m.dsn = dsn
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open SQLite: %w", err)
 	}
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	maxOpen := m.maxOpen
+	if maxOpen <= 0 {
+		maxOpen = 1
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxOpen)
 	db.SetConnMaxLifetime(time.Hour)
 
+	busyTimeout := m.busyTimeout
+	if busyTimeout <= 0 {
+		busyTimeout = 30 * time.Second
+	}
+
 	pragmas := []string{
-		"PRAGMA busy_timeout = 30000",
+		fmt.Sprintf("PRAGMA busy_timeout = %d", busyTimeout.Milliseconds()),
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
 		"PRAGMA cache_size = -64000",
