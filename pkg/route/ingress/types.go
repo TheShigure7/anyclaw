@@ -2,6 +2,16 @@ package ingress
 
 import "time"
 
+// RouteRequest is the lightweight routing input consumed by the M2 router.
+type RouteRequest struct {
+	Channel  string
+	Source   string
+	Text     string
+	ThreadID string
+	IsGroup  bool
+	GroupID  string
+}
+
 // MessageActor captures the sender facts needed by the route layer.
 type MessageActor struct {
 	UserID      string
@@ -54,4 +64,22 @@ type MainRouteRequest struct {
 	DeliveryHint DeliveryHint
 	Hint         RouteHint
 	ReceivedAt   time.Time
+}
+
+// AgentResolution is the M2 output for agent selection.
+type AgentResolution struct {
+	AgentName string
+	MatchedBy string
+}
+
+// RouteDecision is the lightweight M2 -> M3 session policy output.
+type RouteDecision struct {
+	RouteKey        string
+	ForcedSessionID string
+	SessionMode     string
+	QueueMode       string
+	ReplyBack       bool
+	TitleHint       string
+	MatchedRule     string
+	ThreadID        string
 }
