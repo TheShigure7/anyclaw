@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type summarizerFunc func(ctx context.Context, text string) (string, error)
+
+func (f summarizerFunc) Summarize(ctx context.Context, text string) (string, error) {
+	return f(ctx, text)
+}
+
 func newTestMessage(id, role, content string, tokens int) *Message {
 	return &Message{
 		ID:         id,
@@ -47,6 +53,28 @@ func TestCompactorAddClonesInput(t *testing.T) {
 	messages := compactor.Messages()
 	if messages[0].Content != "hello" {
 		t.Fatalf("expected stored content to remain unchanged, got %q", messages[0].Content)
+	}
+}
+
+func TestCompactorAddHonorsHardLimit(t *testing.T) {
+	guard := NewWindowGuard(GuardConfig{
+		MaxTokens:    100,
+		SafetyMargin: 0,
+		HardLimit:    true,
+	})
+	compactor := NewCompactor(guard, DefaultCompactionConfig())
+
+	compactor.Add(newTestMessage("fit", "user", "fits", 80))
+	compactor.Add(newTestMessage("overflow", "user", "too much", 30))
+
+	if compactor.Count() != 1 {
+		t.Fatalf("expected only the in-budget message to remain, got %d messages", compactor.Count())
+	}
+	if compactor.TotalTokens() != 80 {
+		t.Fatalf("expected 80 total tokens after rejecting overflow, got %d", compactor.TotalTokens())
+	}
+	if guard.CurrentTokens() != 80 {
+		t.Fatalf("expected guard to stay at 80 tokens, got %d", guard.CurrentTokens())
 	}
 }
 
@@ -268,6 +296,49 @@ func TestCompactorWithSummarizer(t *testing.T) {
 	}
 	if result.CompactedCount == 0 {
 		t.Error("expected messages compacted")
+	}
+}
+
+func TestCompactorCompactDoesNotHoldMutexDuringSummarize(t *testing.T) {
+	guard := NewWindowGuard(DefaultGuardConfig(1000))
+	compactor := NewCompactor(guard, CompactionConfig{
+		Strategy:         StrategyOldestFirst,
+		MinKeepMessages:  3,
+		MaxSummaryTokens: 100,
+		CompactThreshold: 0.5,
+	})
+
+	for i := 0; i < 10; i++ {
+		compactor.Add(newTestMessage(fmt.Sprintf("m%d", i), "user", "message content", 60))
+	}
+
+	done := make(chan struct{}, 1)
+	errCh := make(chan error, 1)
+
+	go func() {
+		_, err := compactor.Compact(context.Background(), summarizerFunc(func(ctx context.Context, text string) (string, error) {
+			if compactor.Count() == 0 {
+				return "", fmt.Errorf("expected messages to remain visible during summarize")
+			}
+			done <- struct{}{}
+			return "summary", nil
+		}))
+		errCh <- err
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("summarizer blocked while querying compactor state")
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("compact: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("compact did not return")
 	}
 }
 
