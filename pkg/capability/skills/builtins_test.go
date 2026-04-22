@@ -81,6 +81,32 @@ func TestBuiltinSkillCatalogPreservesCategoryAndInstallHint(t *testing.T) {
 	t.Fatal("expected coder catalog entry")
 }
 
+func TestBuiltinSkillAccessors(t *testing.T) {
+	names := ListBuiltinSkillNames()
+	if len(names) != len(BuiltinSkills) {
+		t.Fatalf("expected %d builtin names, got %d", len(BuiltinSkills), len(names))
+	}
+	if names[0] == "" {
+		t.Fatal("expected first builtin name to be non-empty")
+	}
+
+	content, ok := GetBuiltinSkill("coder")
+	if !ok || !strings.Contains(content, `"name": "coder"`) {
+		t.Fatalf("unexpected builtin skill content: %q %v", content, ok)
+	}
+	if _, ok := GetBuiltinSkill("missing-skill"); ok {
+		t.Fatal("expected missing builtin skill lookup to fail")
+	}
+
+	definition, ok := GetBuiltinSkillDefinition("coder")
+	if !ok || definition.Name != "coder" || definition.Category != "engineering" {
+		t.Fatalf("unexpected builtin skill definition: %#v %v", definition, ok)
+	}
+	if _, ok := GetBuiltinSkillDefinition("missing-skill"); ok {
+		t.Fatal("expected missing builtin skill definition lookup to fail")
+	}
+}
+
 func TestExecuteSkillEntrypointRejectsPathsOutsideSkillDir(t *testing.T) {
 	skillDir := filepath.Join(t.TempDir(), "demo")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {

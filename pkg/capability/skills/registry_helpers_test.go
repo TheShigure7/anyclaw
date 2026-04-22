@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestConvertMarkdownToSkillJSONUsesDetailFallbacks(t *testing.T) {
@@ -133,5 +134,131 @@ func TestPathWithinBaseRejectsPrefixLookalikes(t *testing.T) {
 	}
 	if pathWithinBase(baseDir, outside) {
 		t.Fatalf("expected %q to be outside %q", outside, baseDir)
+	}
+}
+
+func TestRegistryHelperRemoteAndFileUtilities(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("User-Agent") != remoteRegistryUserAgent {
+			http.Error(w, "missing user agent", http.StatusBadRequest)
+			return
+		}
+		switch r.URL.Path {
+		case "/json":
+			_, _ = w.Write([]byte(`{"name":"ok"}`))
+		case "/text":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte("hello"))
+		case "/bad-status":
+			http.Error(w, "bad", http.StatusBadGateway)
+		case "/bad-json":
+			_, _ = w.Write([]byte(`{`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newRemoteClient(2 * time.Second)
+	if client.Timeout != 2*time.Second {
+		t.Fatalf("unexpected remote client timeout: %s", client.Timeout)
+	}
+	downloadClient := newRemoteDownloadClient(3 * time.Second)
+	if downloadClient.Timeout != 3*time.Second {
+		t.Fatalf("unexpected download client timeout: %s", downloadClient.Timeout)
+	}
+	if err := downloadClient.CheckRedirect(nil, make([]*http.Request, 10)); err == nil {
+		t.Fatal("expected too many redirects error")
+	}
+
+	resp, err := doRemoteRequest(context.Background(), client, server.URL+"/json")
+	if err != nil {
+		t.Fatalf("doRemoteRequest: %v", err)
+	}
+	resp.Body.Close()
+
+	body, err := fetchRemoteBody(context.Background(), client, server.URL+"/json")
+	if err != nil || string(body) != `{"name":"ok"}` {
+		t.Fatalf("unexpected fetchRemoteBody result %q, %v", body, err)
+	}
+	if _, err := fetchRemoteBody(context.Background(), client, server.URL+"/bad-status"); err == nil {
+		t.Fatal("expected fetchRemoteBody status error")
+	}
+
+	var target map[string]string
+	if err := fetchRemoteJSON(context.Background(), client, server.URL+"/json", &target); err != nil || target["name"] != "ok" {
+		t.Fatalf("unexpected fetchRemoteJSON result %#v, %v", target, err)
+	}
+	if err := fetchRemoteJSON(context.Background(), client, server.URL+"/bad-json", &target); err == nil {
+		t.Fatal("expected fetchRemoteJSON invalid json error")
+	}
+
+	text, status, err := fetchRemoteText(context.Background(), client, server.URL+"/text")
+	if err != nil || status != http.StatusCreated || text != "hello" {
+		t.Fatalf("unexpected fetchRemoteText result %q %d %v", text, status, err)
+	}
+
+	if normalizeSearchLimit(0) != defaultSkillSearchLimit || normalizeSearchLimit(7) != 7 {
+		t.Fatal("unexpected normalized search limit")
+	}
+	if firstNonEmpty("", "  ", "alpha", "beta") != "alpha" {
+		t.Fatal("expected firstNonEmpty to skip blanks")
+	}
+}
+
+func TestRegistryHelperMarshalAndWriteHelpers(t *testing.T) {
+	dir := t.TempDir()
+	definition := skillFileDefinition{
+		Name:           "writer",
+		Description:    "Writes docs",
+		Version:        "1.0.0",
+		Category:       "content",
+		InstallCommand: "anyclaw skill install writer",
+		Prompts:        map[string]string{"system": "Write clearly."},
+	}
+
+	data, err := marshalSkillJSON(definition)
+	if err != nil {
+		t.Fatalf("marshalSkillJSON: %v", err)
+	}
+	if len(data) == 0 || data[len(data)-1] != '\n' {
+		t.Fatalf("expected marshaled JSON to end with newline: %q", data)
+	}
+
+	if err := writeSkillJSONFile(filepath.Join(dir, "one"), data); err != nil {
+		t.Fatalf("writeSkillJSONFile: %v", err)
+	}
+	if err := writeSkillFile(filepath.Join(dir, "two"), definition); err != nil {
+		t.Fatalf("writeSkillFile: %v", err)
+	}
+	if err := installSkillDefinition(dir, "three", definition); err != nil {
+		t.Fatalf("installSkillDefinition: %v", err)
+	}
+
+	entries := buildCatalogEntries([]catalogEntrySpec{{
+		Name:         "writer",
+		FullName:     "Writer",
+		Description:  "Writes docs",
+		Version:      "1.0.0",
+		Category:     "content",
+		Registry:     "builtin",
+		Homepage:     "https://example.com",
+		Source:       "builtin",
+		Permissions:  []string{"files:write"},
+		Entrypoint:   "builtin://writer",
+		InstallHint:  "anyclaw skill install writer",
+		Installed:    true,
+		InstalledDir: filepath.Join(dir, "three"),
+		Builtin:      true,
+	}})
+	if len(entries) != 1 || entries[0].Category != "content" || !entries[0].Builtin {
+		t.Fatalf("unexpected catalog entries: %#v", entries)
+	}
+}
+
+func TestDoRemoteRequestRejectsBadURL(t *testing.T) {
+	client := newRemoteClient(time.Second)
+	if _, err := doRemoteRequest(context.Background(), client, "://bad"); err == nil {
+		t.Fatal("expected bad url error")
 	}
 }
