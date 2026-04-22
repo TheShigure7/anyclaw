@@ -46,6 +46,24 @@ function formatScanStatus(status: string) {
   return status;
 }
 
+function getSafeDiscoveryUrl(value: string) {
+  const candidate = value.trim();
+  if (candidate === "") {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function DiscoveryPage() {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<{ message: string; tone: NoticeTone } | null>(null);
@@ -239,9 +257,11 @@ export function DiscoveryPage() {
               <div className="grid gap-4 xl:grid-cols-2">
                 {filteredPeers.map((instance) => {
                   const status = getInstanceStatus(instance);
+                  const safeUrl = getSafeDiscoveryUrl(instance.url);
+                  const description = safeUrl || instance.address || "未提供";
 
                   return (
-                    <BackendDetailSection key={instance.id} title={instance.name || instance.id} description={instance.url || instance.address}>
+                    <BackendDetailSection key={instance.id} title={instance.name || instance.id} description={description}>
                       <div className="flex flex-wrap gap-2">
                         <StatusBadge label={status.label} tone={status.tone} />
                         {instance.version ? <StatusBadge label={`v${instance.version}`} /> : null}
@@ -271,11 +291,11 @@ export function DiscoveryPage() {
                       </div>
 
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {instance.url ? (
+                        {safeUrl ? (
                           <>
                             <button
                               className="chip-button px-4 py-2 text-sm text-[#667085]"
-                              onClick={() => void handleCopyURL(instance.url)}
+                              onClick={() => void handleCopyURL(safeUrl)}
                               type="button"
                             >
                               <Copy size={14} strokeWidth={2.1} />
@@ -283,7 +303,7 @@ export function DiscoveryPage() {
                             </button>
                             <a
                               className="chip-button px-4 py-2 text-sm text-[#667085]"
-                              href={instance.url}
+                              href={safeUrl}
                               rel="noreferrer"
                               target="_blank"
                             >
