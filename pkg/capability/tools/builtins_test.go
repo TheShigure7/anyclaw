@@ -449,6 +449,59 @@ func TestReadFileToolWithCwdRejectsImageInput(t *testing.T) {
 	}
 }
 
+func TestBuiltinsAdditionalBranches(t *testing.T) {
+	workspace := t.TempDir()
+	protected := filepath.Join(workspace, "protected")
+	if err := os.MkdirAll(protected, 0o755); err != nil {
+		t.Fatalf("mkdir protected: %v", err)
+	}
+
+	if _, err := WriteFileToolWithPolicy(context.Background(), map[string]any{
+		"path":    filepath.Join(workspace, "ok.txt"),
+		"content": "ok",
+	}, workspace, BuiltinOptions{
+		PermissionLevel: "full",
+		Policy:          NewPolicyEngine(PolicyOptions{WorkingDir: workspace, AllowedWritePaths: []string{workspace}}),
+	}); err != nil {
+		t.Fatalf("WriteFileToolWithPolicy allow path: %v", err)
+	}
+
+	emptyDir := filepath.Join(workspace, "empty")
+	if err := os.MkdirAll(emptyDir, 0o755); err != nil {
+		t.Fatalf("mkdir empty: %v", err)
+	}
+	if got, err := ListDirectoryToolWithCwd(context.Background(), map[string]any{"path": emptyDir}, workspace); err != nil || got != "Empty directory" {
+		t.Fatalf("ListDirectoryToolWithCwd empty returned %q, %v", got, err)
+	}
+	if got, err := SearchFilesToolWithCwd(context.Background(), map[string]any{"path": workspace, "pattern": "*.missing"}, workspace); err != nil || got != "No matches found" {
+		t.Fatalf("SearchFilesToolWithCwd no matches returned %q, %v", got, err)
+	}
+	if _, err := ReadFileToolWithCwd(context.Background(), map[string]any{}, workspace); err == nil {
+		t.Fatal("expected missing path error from ReadFileToolWithCwd")
+	}
+	if _, err := WriteFileToolWithCwd(context.Background(), map[string]any{"path": "x.txt"}, workspace, "full"); err == nil {
+		t.Fatal("expected missing content error from WriteFileToolWithCwd")
+	}
+
+	if _, err := RunCommandToolWithPolicy(context.Background(), map[string]any{"command": "echo hi"}, BuiltinOptions{
+		PermissionLevel: "read-only",
+	}); err == nil {
+		t.Fatal("expected read-only command execution to be denied")
+	}
+
+	cancelled := false
+	if _, err := RunCommandToolWithPolicy(context.Background(), map[string]any{"command": "rm -rf tmp"}, BuiltinOptions{
+		ExecutionMode:     "host-reviewed",
+		DangerousPatterns: []string{"rm -rf"},
+		ConfirmDangerousCommand: func(string) bool {
+			cancelled = true
+			return false
+		},
+	}); err == nil || !cancelled {
+		t.Fatal("expected dangerous command confirmation to cancel execution")
+	}
+}
+
 type stubQMDClient struct {
 	insertedIDs []string
 }

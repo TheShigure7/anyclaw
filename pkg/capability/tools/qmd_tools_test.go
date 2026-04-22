@@ -121,6 +121,31 @@ func TestParseValue(t *testing.T) {
 	}
 }
 
+func TestRegisterQMDToolsBehavior(t *testing.T) {
+	registry := NewRegistry()
+	RegisterQMDTools(registry, BuiltinOptions{})
+	if _, ok := registry.Get("qmd"); ok {
+		t.Fatal("expected QMD tool to be skipped when client is nil")
+	}
+
+	client := &stubRichQMDClient{tables: []TableStat{{Name: "tasks", RowCount: 1, Columns: 2}}}
+	RegisterQMDTools(registry, BuiltinOptions{QMDClient: client})
+	tool, ok := registry.Get("qmd")
+	if !ok {
+		t.Fatal("expected QMD tool to be registered")
+	}
+	result, err := tool.Handler(context.Background(), map[string]any{"action": "list_tables"})
+	if err != nil || !strings.Contains(result, "tasks") {
+		t.Fatalf("registered QMD handler returned %q, %v", result, err)
+	}
+
+	emptyClient := &stubRichQMDClient{}
+	output, err := qmdListTables(context.Background(), emptyClient)
+	if err != nil || output != "No QMD tables found" {
+		t.Fatalf("qmdListTables empty returned %q, %v", output, err)
+	}
+}
+
 type stubRichQMDClient struct {
 	tables  []TableStat
 	record  map[string]any

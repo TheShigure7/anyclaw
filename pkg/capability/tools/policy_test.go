@@ -200,3 +200,26 @@ func TestPrivacyEngineCheckEgressInvalidURL(t *testing.T) {
 		t.Fatalf("expected invalid URL to be denied, got %#v", result)
 	}
 }
+
+func TestPolicyCommandAndPluginBranches(t *testing.T) {
+	workspace := t.TempDir()
+	policy := NewPolicyEngine(PolicyOptions{
+		WorkingDir:        workspace,
+		AllowedWritePaths: []string{workspace},
+		PermissionLevel:   "read-only",
+	})
+	if err := policy.CheckCommandCwd(workspace); err == nil {
+		t.Fatal("expected read-only command cwd to be denied")
+	}
+
+	policy = NewPolicyEngine(PolicyOptions{
+		WorkingDir:           workspace,
+		AllowedEgressDomains: []string{"example.com"},
+	})
+	if err := policy.ValidatePluginPermissions("demo-plugin", []string{"tool:exec"}); err != nil {
+		t.Fatalf("expected non-net permissions to pass, got %v", err)
+	}
+	if err := policy.CheckEgressURL("file:///tmp/demo"); err != nil {
+		t.Fatalf("expected file scheme egress to be allowed, got %v", err)
+	}
+}

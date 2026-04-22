@@ -58,3 +58,23 @@ func TestSearchAndFetch(t *testing.T) {
 		t.Fatalf("unexpected fetched content: %q", content)
 	}
 }
+
+func TestSearchAndFetchErrorPaths(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`not-json`))
+	}))
+	defer server.Close()
+
+	originalEndpoint := searchEndpoint
+	searchEndpoint = server.URL
+	t.Cleanup(func() {
+		searchEndpoint = originalEndpoint
+	})
+
+	if _, err := Search(context.Background(), "demo", 5); err == nil {
+		t.Fatal("expected Search to fail on invalid JSON response")
+	}
+	if _, err := Fetch(context.Background(), "://bad"); err == nil {
+		t.Fatal("expected Fetch to fail on invalid URL")
+	}
+}

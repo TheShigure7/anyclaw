@@ -72,6 +72,16 @@ func TestRegisterBuiltinsClosuresAndAudit(t *testing.T) {
 	}
 }
 
+func TestAuditCallWithoutLogger(t *testing.T) {
+	wrapped := auditCall(BuiltinOptions{}, "noop", map[string]any{"x": 1}, func(context.Context, map[string]any) (string, error) {
+		return "ok", nil
+	})
+	got, err := wrapped(context.Background(), nil)
+	if err != nil || got != "ok" {
+		t.Fatalf("auditCall returned %q, %v", got, err)
+	}
+}
+
 type auditLoggerFunc func(toolName string, input map[string]any, output string, err error)
 
 func (f auditLoggerFunc) LogTool(toolName string, input map[string]any, output string, err error) {
