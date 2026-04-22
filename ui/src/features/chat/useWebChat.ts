@@ -615,14 +615,11 @@ function mergeRemoteSessions(
     .filter((session): session is StoredChatSession => session !== null);
 
   const localOnlySessions = state.sessions.filter((session) => !session.remoteSessionId);
-  const retainedActiveSessions = state.sessions.filter((session) => {
-    if (!session.remoteSessionId || remoteSessionIDs.has(session.remoteSessionId)) {
-      return false;
-    }
-    return session.key === state.selectedSessionKey || session.remoteSessionId === state.sessionId;
-  });
+  const retainedRemoteSessions = state.sessions.filter(
+    (session) => session.remoteSessionId && !remoteSessionIDs.has(session.remoteSessionId),
+  );
 
-  const sessions = sortSessions([...localOnlySessions, ...mergedRemoteSessions, ...retainedActiveSessions]);
+  const sessions = sortSessions([...localOnlySessions, ...mergedRemoteSessions, ...retainedRemoteSessions]);
   const keepBlankConversation =
     state.selectedSessionKey === null &&
     state.sessionId === null &&
@@ -1370,4 +1367,3 @@ export function useWebChat(agentName: string | null, workspacePath: string | nul
     setDraft,
   };
 }
-
