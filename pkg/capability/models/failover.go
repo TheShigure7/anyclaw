@@ -92,17 +92,7 @@ func (fc *FailoverClient) StreamChat(ctx context.Context, messages []Message, to
 		return fc.primary.StreamChat(ctx, messages, tools, onChunk)
 	}
 
-	// Try primary, but only fail over if it fails before emitting any output.
-	var emitted bool
-	forwardingChunk := func(chunk string) {
-		if chunk == "" {
-			return
-		}
-		emitted = true
-		onChunk(chunk)
-	}
-
-	err := fc.primary.StreamChat(ctx, messages, tools, forwardingChunk)
+	err, emitted := fc.streamWithFailoverGuard(ctx, fc.primary, messages, tools, onChunk)
 	if err == nil {
 		return nil
 	}
@@ -112,13 +102,30 @@ func (fc *FailoverClient) StreamChat(ctx context.Context, messages []Message, to
 
 	// Try fallbacks
 	for _, fallback := range fc.fallbacks {
-		err = fallback.StreamChat(ctx, messages, tools, onChunk)
+		err, emitted = fc.streamWithFailoverGuard(ctx, fallback, messages, tools, onChunk)
 		if err == nil {
 			return nil
+		}
+		if emitted {
+			return fmt.Errorf("stream interrupted after partial output from %s: %w", fallback.Name(), err)
 		}
 	}
 
 	return fmt.Errorf("all providers failed: %w", err)
+}
+
+func (fc *FailoverClient) streamWithFailoverGuard(ctx context.Context, client Client, messages []Message, tools []ToolDefinition, onChunk func(string)) (error, bool) {
+	var emitted bool
+	forwardingChunk := func(chunk string) {
+		if chunk == "" {
+			return
+		}
+		emitted = true
+		onChunk(chunk)
+	}
+
+	err := client.StreamChat(ctx, messages, tools, forwardingChunk)
+	return err, emitted
 }
 
 // Name returns the client name

@@ -164,3 +164,122 @@ func TestMemoryToolsSearchAndGetDailyFiles(t *testing.T) {
 		t.Fatalf("expected memory_get output, got %q", getResult)
 	}
 }
+
+func TestWebSearchToolWithPolicyRejectsDisallowedEgress(t *testing.T) {
+	policy := NewPolicyEngine(PolicyOptions{
+		WorkingDir:           t.TempDir(),
+		AllowedEgressDomains: []string{"example.com"},
+	})
+
+	_, err := WebSearchToolWithPolicy(context.Background(), map[string]any{
+		"query": "golang",
+	}, BuiltinOptions{Policy: policy})
+	if err == nil {
+		t.Fatal("expected web search to be denied when search provider host is not allowlisted")
+	}
+}
+
+func TestFetchURLToolWithPolicyRejectsDisallowedEgress(t *testing.T) {
+	policy := NewPolicyEngine(PolicyOptions{
+		WorkingDir:           t.TempDir(),
+		AllowedEgressDomains: []string{"example.com"},
+	})
+
+	_, err := FetchURLToolWithPolicy(context.Background(), map[string]any{
+		"url": "https://openai.com",
+	}, BuiltinOptions{Policy: policy})
+	if err == nil {
+		t.Fatal("expected fetch_url to be denied when target host is not allowlisted")
+	}
+}
+
+func TestRegisterToolDoesNotCacheByDefault(t *testing.T) {
+	registry := NewRegistry()
+	callCount := 0
+	registry.RegisterTool("side_effect", "demo", map[string]any{}, func(_ context.Context, _ map[string]any) (string, error) {
+		callCount++
+		return strings.Repeat("x", callCount), nil
+	})
+
+	first, err := registry.Call(context.Background(), "side_effect", map[string]any{"id": 1})
+	if err != nil {
+		t.Fatalf("first Call: %v", err)
+	}
+	second, err := registry.Call(context.Background(), "side_effect", map[string]any{"id": 1})
+	if err != nil {
+		t.Fatalf("second Call: %v", err)
+	}
+
+	if callCount != 2 {
+		t.Fatalf("expected handler to run twice without default caching, got %d", callCount)
+	}
+	if first == second {
+		t.Fatalf("expected different results from repeated side-effecting calls, got %q and %q", first, second)
+	}
+}
+
+func TestQMDInsertGeneratesUniqueIDs(t *testing.T) {
+	client := &stubQMDClient{}
+	input := map[string]any{
+		"data": map[string]any{
+			"name": "demo",
+		},
+	}
+
+	if _, err := qmdInsert(context.Background(), client, "tasks", input); err != nil {
+		t.Fatalf("first qmdInsert: %v", err)
+	}
+	if _, err := qmdInsert(context.Background(), client, "tasks", input); err != nil {
+		t.Fatalf("second qmdInsert: %v", err)
+	}
+
+	if len(client.insertedIDs) != 2 {
+		t.Fatalf("expected two inserted IDs, got %d", len(client.insertedIDs))
+	}
+	if client.insertedIDs[0] == client.insertedIDs[1] {
+		t.Fatalf("expected generated QMD IDs to differ, got %q", client.insertedIDs[0])
+	}
+}
+
+type stubQMDClient struct {
+	insertedIDs []string
+}
+
+func (s *stubQMDClient) CreateTable(context.Context, string, []string) error {
+	return nil
+}
+
+func (s *stubQMDClient) Insert(_ context.Context, _ string, record map[string]any) error {
+	if id, _ := record["id"].(string); id != "" {
+		s.insertedIDs = append(s.insertedIDs, id)
+	}
+	return nil
+}
+
+func (s *stubQMDClient) Get(context.Context, string, string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (s *stubQMDClient) Update(context.Context, string, map[string]any) error {
+	return nil
+}
+
+func (s *stubQMDClient) Delete(context.Context, string, string) error {
+	return nil
+}
+
+func (s *stubQMDClient) List(context.Context, string, int) ([]map[string]any, error) {
+	return nil, nil
+}
+
+func (s *stubQMDClient) Query(context.Context, string, string, any, int) ([]map[string]any, error) {
+	return nil, nil
+}
+
+func (s *stubQMDClient) ListTables(context.Context) ([]TableStat, error) {
+	return nil, nil
+}
+
+func (s *stubQMDClient) Count(context.Context, string) (int, error) {
+	return 0, nil
+}

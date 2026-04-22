@@ -43,6 +43,19 @@ func TestPolicyEngineAllowsConfiguredWritePathEvenIfProtected(t *testing.T) {
 	}
 }
 
+func TestPolicyEngineDeniesProtectedPathInsideWorkingDir(t *testing.T) {
+	workspace := t.TempDir()
+	protected := filepath.Join(workspace, "private")
+	policy := NewPolicyEngine(PolicyOptions{
+		WorkingDir:     workspace,
+		ProtectedPaths: []string{protected},
+	})
+
+	if err := policy.CheckReadPath(filepath.Join(protected, "secret.txt")); err == nil {
+		t.Fatal("expected protected path inside working directory to be denied")
+	}
+}
+
 func TestPolicyEngineDeniesBrowserUploadWithoutAllowedDomain(t *testing.T) {
 	workspace := t.TempDir()
 	policy := NewPolicyEngine(PolicyOptions{WorkingDir: workspace})
