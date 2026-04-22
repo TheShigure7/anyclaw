@@ -2,8 +2,10 @@ package llm
 
 import (
 	"context"
+	"net/url"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -208,5 +210,59 @@ func TestStreamAnthropicUsesConfiguredBaseURL(t *testing.T) {
 	}
 	if strings.Join(chunks, "") != "hello world" {
 		t.Fatalf("expected streamed anthropic content, got %q", strings.Join(chunks, ""))
+	}
+}
+
+func TestNewHTTPClientUsesSystemProxyFromEnvironment(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:18080")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:18443")
+	t.Setenv("NO_PROXY", "")
+
+	httpClient := newHTTPClient("system")
+	transport, ok := httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", httpClient.Transport)
+	}
+	if transport.Proxy == nil {
+		t.Fatal("expected proxy func to be set for system proxy mode")
+	}
+
+	req, err := http.NewRequest("GET", "http://example.com", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	proxyURL, err := transport.Proxy(req)
+	if err != nil {
+		t.Fatalf("Proxy: %v", err)
+	}
+	if proxyURL == nil || proxyURL.String() != "http://127.0.0.1:18080" {
+		t.Fatalf("expected system proxy to be used, got %#v", proxyURL)
+	}
+}
+
+func TestNewHTTPClientUsesExplicitProxyURL(t *testing.T) {
+	_ = os.Setenv("HTTP_PROXY", "http://127.0.0.1:18080")
+	httpClient := newHTTPClient("http://proxy.example.test:8080")
+	transport, ok := httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", httpClient.Transport)
+	}
+	if transport.Proxy == nil {
+		t.Fatal("expected proxy func to be set for explicit proxy mode")
+	}
+
+	req, err := http.NewRequest("GET", "https://example.com", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	proxyURL, err := transport.Proxy(req)
+	if err != nil {
+		t.Fatalf("Proxy: %v", err)
+	}
+	want, _ := url.Parse("http://proxy.example.test:8080")
+	if proxyURL == nil || proxyURL.String() != want.String() {
+		t.Fatalf("expected explicit proxy %q, got %#v", want.String(), proxyURL)
 	}
 }

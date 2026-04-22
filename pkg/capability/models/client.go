@@ -127,7 +127,7 @@ func newHTTPClient(proxyURL string) *http.Client {
 
 	if proxyURL != "" {
 		if proxyURL == "system" {
-			// Use system proxy
+			transport.Proxy = http.ProxyFromEnvironment
 		} else {
 			transport.Proxy = func(req *http.Request) (*url.URL, error) {
 				return url.Parse(proxyURL)
