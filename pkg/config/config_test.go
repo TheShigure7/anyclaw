@@ -8,6 +8,47 @@ import (
 	"testing"
 )
 
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+
+	for _, key := range []string{
+		"OPENAI_API_KEY",
+		"ANTHROPIC_API_KEY",
+		"LLM_PROVIDER",
+		"LLM_MODEL",
+		"LLM_BASE_URL",
+		"ANYCLAW_GATEWAY_HOST",
+		"ANYCLAW_GATEWAY_BIND",
+		"ANYCLAW_GATEWAY_PORT",
+		"ANYCLAW_TELEGRAM_BOT_TOKEN",
+		"ANYCLAW_TELEGRAM_CHAT_ID",
+		"ANYCLAW_SLACK_BOT_TOKEN",
+		"ANYCLAW_SLACK_APP_TOKEN",
+		"ANYCLAW_SLACK_DEFAULT_CHANNEL",
+		"ANYCLAW_DISCORD_BOT_TOKEN",
+		"ANYCLAW_DISCORD_DEFAULT_CHANNEL",
+		"ANYCLAW_DISCORD_API_BASE_URL",
+		"ANYCLAW_DISCORD_GUILD_ID",
+		"ANYCLAW_DISCORD_PUBLIC_KEY",
+		"ANYCLAW_DISCORD_USE_GATEWAY_WS",
+		"ANYCLAW_WHATSAPP_ACCESS_TOKEN",
+		"ANYCLAW_WHATSAPP_PHONE_NUMBER_ID",
+		"ANYCLAW_WHATSAPP_VERIFY_TOKEN",
+		"ANYCLAW_WHATSAPP_APP_SECRET",
+		"ANYCLAW_WHATSAPP_DEFAULT_RECIPIENT",
+		"ANYCLAW_SIGNAL_BASE_URL",
+		"ANYCLAW_SIGNAL_NUMBER",
+		"ANYCLAW_SIGNAL_DEFAULT_RECIPIENT",
+		"ANYCLAW_SIGNAL_BEARER_TOKEN",
+		"ANYCLAW_API_TOKEN",
+		"ANYCLAW_WEBHOOK_SECRET",
+		"ANYCLAW_RATE_LIMIT_RPM",
+		"ANYCLAW_PLUGIN_EXEC_TIMEOUT",
+	} {
+		t.Setenv(key, "")
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if err := cfg.Validate(); err != nil {
@@ -148,6 +189,8 @@ func TestValidateMultipleErrors(t *testing.T) {
 }
 
 func TestLoadNonExistentFile(t *testing.T) {
+	clearConfigEnv(t)
+
 	cfg, err := Load(filepath.Join(t.TempDir(), "nonexistent.json"))
 	if err != nil {
 		t.Fatalf("loading non-existent file should use defaults: %v", err)
@@ -158,6 +201,8 @@ func TestLoadNonExistentFile(t *testing.T) {
 }
 
 func TestLoadValidFile(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
@@ -177,6 +222,8 @@ func TestLoadValidFile(t *testing.T) {
 }
 
 func TestLoadInvalidJSON(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.json")
 	os.WriteFile(path, []byte("{invalid json}"), 0644)
@@ -191,6 +238,8 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestLoadUTF8BOMConfig(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bom.json")
 
@@ -212,6 +261,8 @@ func TestLoadUTF8BOMConfig(t *testing.T) {
 }
 
 func TestLoadLegacyAliasConfig(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "legacy.json")
 	data := []byte(`{
@@ -262,6 +313,8 @@ func TestResolvePathUsesConfigDirectory(t *testing.T) {
 }
 
 func TestLoadInvalidConfig(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "invalid.json")
 
@@ -280,6 +333,7 @@ func TestLoadInvalidConfig(t *testing.T) {
 }
 
 func TestEnvOverrides(t *testing.T) {
+	clearConfigEnv(t)
 	t.Setenv("OPENAI_API_KEY", "test-key-123")
 
 	dir := t.TempDir()
@@ -298,6 +352,8 @@ func TestEnvOverrides(t *testing.T) {
 }
 
 func TestSaveAndReload(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
@@ -536,6 +592,8 @@ func TestSubAgentLLMValidation(t *testing.T) {
 }
 
 func TestLoadSubAgentExplicitZeroOverrides(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := []byte(`{
@@ -612,6 +670,8 @@ func TestGatewayControlUIBasePathValidation(t *testing.T) {
 }
 
 func TestLoadControlUIConfigNormalizesValues(t *testing.T) {
+	clearConfigEnv(t)
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := []byte(`{
