@@ -1,9 +1,12 @@
 package context
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/1024XEngineer/anyclaw/pkg/config"
+	"github.com/1024XEngineer/anyclaw/pkg/state/memory"
 	"github.com/1024XEngineer/anyclaw/pkg/state/policy/secrets"
 )
 
@@ -37,6 +40,28 @@ func TestResolveSecretPreservesPlaintextWhenNothingResolves(t *testing.T) {
 	got := resolveSecret(snap, "${SECRET:missing_key}", "llm_api_key")
 	if got != "${SECRET:missing_key}" {
 		t.Fatalf("expected unresolved placeholder to remain unchanged, got %q", got)
+	}
+}
+
+func TestResolveEmbedderUsesCustomEmbedBaseURL(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Provider = "openai"
+	cfg.LLM.APIKey = "llm-key"
+	cfg.LLM.BaseURL = "https://default.example/v1"
+	if cfg.LLM.Extra == nil {
+		cfg.LLM.Extra = map[string]string{}
+	}
+	cfg.LLM.Extra["embed_model"] = "text-embedding-3-small"
+	cfg.LLM.Extra["embed_base_url"] = "https://embed.example/v1"
+
+	provider := ResolveEmbedder(cfg, nil)
+	openAIProvider, ok := provider.(*memory.OpenAIEmbeddingProvider)
+	if !ok {
+		t.Fatalf("expected OpenAI embedding provider, got %T", provider)
+	}
+	baseURL := reflect.ValueOf(openAIProvider).Elem().FieldByName("baseURL").String()
+	if baseURL != "https://embed.example/v1" {
+		t.Fatalf("expected custom embed base URL, got %q", baseURL)
 	}
 }
 
