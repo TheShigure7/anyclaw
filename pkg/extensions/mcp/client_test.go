@@ -40,7 +40,7 @@ func TestMCPClientHelperProcess(t *testing.T) {
 }
 
 func TestClientConnectAndCalls(t *testing.T) {
-	client := newHelperClient(t, "")
+	client := newHelperClient(t, "notify-first")
 	if err := client.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -100,6 +100,26 @@ func TestClientConnectAndCalls(t *testing.T) {
 	}
 	if client.IsConnected() {
 		t.Fatal("expected client to be disconnected after close")
+	}
+}
+
+func TestClientConnectPreservesParentEnvironment(t *testing.T) {
+	t.Setenv("MCP_TEST_INHERITED", "present")
+
+	client := NewClient("helper", os.Args[0], helperArgs("env-check"), map[string]string{
+		"MCP_TEST_CUSTOM": "overlay",
+	})
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+
+	result, err := client.CallTool(context.Background(), "echo", map[string]any{"message": "ignored"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if text := firstContentText(result); text != "tool:inherited=present;custom=overlay" {
+		t.Fatalf("unexpected env result: %q", text)
 	}
 }
 
@@ -219,9 +239,15 @@ func helperResponse(req Request) *Response {
 			},
 		}
 	case "tools/call":
+		if helperMode() == "helper notify-first" {
+			fmt.Fprintln(os.Stdout, `{"jsonrpc":"2.0","method":"notifications/test","params":{"note":"ready"}}`)
+		}
 		params := req.Params.(map[string]any)
 		args, _ := params["arguments"].(map[string]any)
 		message := fmt.Sprintf("%v", args["message"])
+		if helperMode() == "helper env-check" {
+			message = fmt.Sprintf("inherited=%s;custom=%s", os.Getenv("MCP_TEST_INHERITED"), os.Getenv("MCP_TEST_CUSTOM"))
+		}
 		return &Response{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -263,6 +289,14 @@ func helperResponse(req Request) *Response {
 			ID:      req.ID,
 			Error:   &Error{Code: -32601, Message: "Method not found"},
 		}
+	}
+}
+
+func TestMergeEnv(t *testing.T) {
+	merged := mergeEnv([]string{"A=1", "B=2"}, map[string]string{"B": "updated", "C": "3"})
+	got := strings.Join(merged, ",")
+	if !strings.Contains(got, "A=1") || !strings.Contains(got, "B=updated") || !strings.Contains(got, "C=3") {
+		t.Fatalf("unexpected merged env: %#v", merged)
 	}
 }
 
