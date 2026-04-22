@@ -136,4 +136,72 @@ describe("ChannelsControlConsole", () => {
       expect(toggleMentionGate).toHaveBeenCalledWith(false);
     });
   });
+
+  it("falls back to the selected channel snapshot when live adapter status is unavailable", () => {
+    useChannelControlMock.mockReturnValue({
+      adapterStatusesError: null,
+      isLoading: false,
+      mentionGate: { enabled: false },
+      mentionGateError: null,
+      pairDevice: vi.fn(),
+      pairDeviceError: null,
+      pairDevicePending: false,
+      pairingEnabled: false,
+      pairingError: null,
+      presenceError: null,
+      selectedAdapterStatus: null,
+      selectedContacts: [],
+      selectedPairings: [],
+      selectedPresence: [],
+      toggleMentionGate: vi.fn(),
+      toggleMentionGateError: null,
+      toggleMentionGatePending: false,
+      unpairDevice: vi.fn(),
+      unpairDeviceError: null,
+      unpairDevicePending: false,
+    } as never);
+
+    render(<ChannelsControlConsole selectedChannel={selectedChannel} />);
+
+    expect(screen.getByText("运行中")).toBeInTheDocument();
+    expect(screen.getByText("健康")).toBeInTheDocument();
+  });
+
+  it("blocks pairing submission when required identifiers are blank after trimming", async () => {
+    const pairDevice = vi.fn().mockResolvedValue({ status: "ok" });
+
+    useChannelControlMock.mockReturnValue({
+      adapterStatusesError: null,
+      isLoading: false,
+      mentionGate: { enabled: true },
+      mentionGateError: null,
+      pairDevice,
+      pairDeviceError: null,
+      pairDevicePending: false,
+      pairingEnabled: true,
+      pairingError: null,
+      presenceError: null,
+      selectedAdapterStatus: null,
+      selectedContacts: [],
+      selectedPairings: [],
+      selectedPresence: [],
+      toggleMentionGate: vi.fn(),
+      toggleMentionGateError: null,
+      toggleMentionGatePending: false,
+      unpairDevice: vi.fn(),
+      unpairDeviceError: null,
+      unpairDevicePending: false,
+    } as never);
+
+    render(<ChannelsControlConsole selectedChannel={selectedChannel} />);
+
+    const inputs = screen.getAllByRole("textbox");
+    fireEvent.change(inputs[0], { target: { value: "   " } });
+    fireEvent.change(inputs[1], { target: { value: "   " } });
+
+    fireEvent.click(screen.getByRole("button", { name: "新增配对" }));
+
+    expect(pairDevice).not.toHaveBeenCalled();
+    expect(screen.getByText("用户 ID 和设备 ID 不能为空")).toBeInTheDocument();
+  });
 });

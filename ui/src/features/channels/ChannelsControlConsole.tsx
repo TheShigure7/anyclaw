@@ -113,17 +113,23 @@ export function ChannelsControlConsole({ selectedChannel }: ChannelsControlConso
   }
 
   const channelName = selectedChannel.name;
+  const fallbackEnabled = selectedChannel.enabled;
+  const fallbackRunning = selectedChannel.running;
+  const fallbackHealthy = selectedChannel.healthy;
+  const effectiveEnabled = selectedAdapterStatus?.enabled ?? fallbackEnabled;
+  const effectiveRunning = selectedAdapterStatus?.running ?? fallbackRunning;
+  const effectiveHealthy = selectedAdapterStatus?.healthy ?? fallbackHealthy;
   const runtimeLabel = getAdapterRuntimeLabel(
     selectedChannel,
-    selectedAdapterStatus?.enabled ?? false,
-    selectedAdapterStatus?.running ?? false,
-    selectedAdapterStatus?.healthy ?? false,
+    effectiveEnabled,
+    effectiveRunning,
+    effectiveHealthy,
   );
   const runtimeTone = getAdapterRuntimeTone(
     selectedChannel,
-    selectedAdapterStatus?.enabled ?? false,
-    selectedAdapterStatus?.running ?? false,
-    selectedAdapterStatus?.healthy ?? false,
+    effectiveEnabled,
+    effectiveRunning,
+    effectiveHealthy,
   );
   const sortedPresence = [...selectedPresence].sort((left, right) => left.user_id.localeCompare(right.user_id));
   const sortedPairings = [...selectedPairings].sort((left, right) => right.last_seen.localeCompare(left.last_seen));
@@ -151,13 +157,21 @@ export function ChannelsControlConsole({ selectedChannel }: ChannelsControlConso
     event.preventDefault();
     const ttlHours = Number(pairForm.ttlHours || "24");
     const normalizedTtlHours = Number.isFinite(ttlHours) ? ttlHours : 24;
+    const userId = pairForm.userId.trim();
+    const deviceId = pairForm.deviceId.trim();
+    const displayName = pairForm.displayName.trim();
+
+    if (userId === "" || deviceId === "") {
+      setActionNotice({ message: "用户 ID 和设备 ID 不能为空", tone: "error" });
+      return;
+    }
 
     try {
       await pairDevice({
-        device_id: pairForm.deviceId.trim(),
-        display_name: pairForm.displayName.trim(),
+        device_id: deviceId,
+        display_name: displayName,
         ttl_seconds: Math.max(1, normalizedTtlHours) * 3600,
-        user_id: pairForm.userId.trim(),
+        user_id: userId,
       });
       setPairForm(defaultPairForm);
       setActionNotice({ message: `${channelName} 新增配对成功`, tone: "success" });
@@ -206,7 +220,7 @@ export function ChannelsControlConsole({ selectedChannel }: ChannelsControlConso
                 },
                 {
                   label: "健康状态",
-                  value: selectedAdapterStatus ? (selectedAdapterStatus.healthy ? "健康" : "待恢复") : "未接入",
+                  value: effectiveHealthy ? "健康" : effectiveEnabled ? "待恢复" : selectedChannel.configured ? "待启用" : "未接入",
                 },
                 {
                   label: "最近活动",

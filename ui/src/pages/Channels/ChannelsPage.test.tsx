@@ -83,4 +83,16 @@ describe("ChannelsPage", () => {
 
     expect(screen.getByTestId("channels-control-console")).toHaveTextContent("signal");
   });
+
+  it("keeps the planned summary aligned with the planned filter logic", () => {
+    render(
+      <MemoryRouter initialEntries={["/channels"]}>
+        <ChannelsPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "待接入" })[0]);
+
+    expect(screen.getByTestId("channels-control-console")).toHaveTextContent("signal");
+  });
 });
