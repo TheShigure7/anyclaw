@@ -365,6 +365,37 @@ func TestVoiceWakeCoordinator_StopClearsWakeListenerState(t *testing.T) {
 	}
 }
 
+func TestVoiceWakeCoordinator_StartKeepsWakeListenerRunning(t *testing.T) {
+	cfg := DefaultVoiceWakeCoordinatorConfig()
+	cfg.DeviceID = "test-device"
+	cfg.DeviceName = "Test Device"
+	cfg.Enabled = true
+	cfg.BroadcastPort = 19922
+	cfg.WakeEventPort = 19923
+
+	coord := NewVoiceWakeCoordinator(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := coord.Start(ctx); err != nil {
+		t.Fatalf("failed to start coordinator: %v", err)
+	}
+	defer coord.Stop()
+
+	if coord.wakeListenDone == nil {
+		t.Fatal("expected wake listener done channel after start")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	select {
+	case <-coord.wakeListenDone:
+		t.Fatal("wake listener exited unexpectedly while coordinator is running")
+	default:
+	}
+}
+
 func TestVoiceWakeCoordinator_SubmitWake(t *testing.T) {
 	cfg := DefaultVoiceWakeCoordinatorConfig()
 	cfg.DeviceID = "test-device"
