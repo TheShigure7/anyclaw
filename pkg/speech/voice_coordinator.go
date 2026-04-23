@@ -171,18 +171,21 @@ func (c *VoiceWakeCoordinator) Stop() error {
 	}
 
 	c.isRunning = false
-
-	if err := c.discovery.Stop(); err != nil {
-		log.Printf("coordinator: error stopping discovery: %v", err)
-	}
-
+	discovery := c.discovery
+	arbitration := c.arbitration
 	c.mu.Unlock()
+
+	if discovery != nil {
+		if err := discovery.Stop(); err != nil {
+			log.Printf("coordinator: error stopping discovery: %v", err)
+		}
+	}
 
 	c.stopWakeEventListener()
 
-	c.mu.Lock()
-	c.arbitration.Clear()
-	c.mu.Unlock()
+	if arbitration != nil {
+		arbitration.Clear()
+	}
 
 	log.Printf("coordinator: stopped")
 
@@ -512,14 +515,19 @@ func (c *VoiceWakeCoordinator) startWakeEventListener() error {
 }
 
 func (c *VoiceWakeCoordinator) stopWakeEventListener() {
-	if c.wakeConn != nil {
-		c.wakeConn.Close()
-		c.wakeConn = nil
+	c.mu.Lock()
+	conn := c.wakeConn
+	done := c.wakeListenDone
+	c.wakeConn = nil
+	c.wakeListenDone = nil
+	c.mu.Unlock()
+
+	if conn != nil {
+		_ = conn.Close()
 	}
 
-	if c.wakeListenDone != nil {
-		<-c.wakeListenDone
-		c.wakeListenDone = nil
+	if done != nil {
+		<-done
 	}
 }
 
