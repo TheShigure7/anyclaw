@@ -309,6 +309,9 @@ func isSafeSkillInstallSegment(part string) bool {
 	if strings.Contains(part, "/") || strings.Contains(part, "\\") {
 		return false
 	}
+	if strings.Contains(part, ":") {
+		return false
+	}
 	if filepath.IsAbs(part) || filepath.VolumeName(part) != "" {
 		return false
 	}
