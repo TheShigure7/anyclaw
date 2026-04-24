@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/1024XEngineer/anyclaw/pkg/config"
 	"github.com/1024XEngineer/anyclaw/pkg/extensions/plugin"
@@ -50,7 +51,11 @@ func runPluginNew(args []string) error {
 	if strings.TrimSpace(*name) == "" {
 		return fmt.Errorf("--name is required")
 	}
-	return scaffoldPlugin(*name, *kind)
+	safeName, err := normalizePluginName(*name)
+	if err != nil {
+		return err
+	}
+	return scaffoldPlugin(safeName, *kind)
 }
 
 type pluginDoctorIssue struct {
@@ -211,6 +216,45 @@ func scaffoldPlugin(name string, kind string) error {
 	printSuccess("Scaffolded %s plugin at %s", kind, pluginDir)
 	printInfo("Next: implement the script, compute sha256, update plugin.json, and enable exec if needed")
 	return nil
+}
+
+func normalizePluginName(name string) (string, error) {
+	raw := strings.TrimSpace(name)
+	if raw == "" {
+		return "", fmt.Errorf("--name is required")
+	}
+	if filepath.IsAbs(raw) || strings.Contains(raw, "/") || strings.Contains(raw, "\\") {
+		return "", fmt.Errorf("plugin name must not contain path separators")
+	}
+	if raw == "." || raw == ".." {
+		return "", fmt.Errorf("plugin name must not be %q", raw)
+	}
+
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(raw) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastDash = false
+		case r == '-' || r == '_' || unicode.IsSpace(r):
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		default:
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		return "", fmt.Errorf("plugin name must contain letters or numbers")
+	}
+	return slug, nil
 }
 
 func scriptNameForKind(kind string) string {

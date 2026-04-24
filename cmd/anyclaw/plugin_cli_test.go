@@ -164,3 +164,54 @@ func TestRunPluginCommandNewScaffoldsCodexManifest(t *testing.T) {
 		t.Fatalf("expected codex plugin manifest: %v", err)
 	}
 }
+
+func TestRunPluginCommandNewRejectsPathTraversalName(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir tempDir: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(wd)
+	}()
+
+	err = runPluginCommand([]string{"new", "--name", "../escape", "--kind", "tool"})
+	if err == nil || !strings.Contains(err.Error(), "path separators") {
+		t.Fatalf("expected path separator validation error, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(tempDir, "escape")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected traversal target to stay absent, got %v", statErr)
+	}
+}
+
+func TestRunPluginCommandNewNormalizesSafeSlug(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir tempDir: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(wd)
+	}()
+
+	if err := runPluginCommand([]string{"new", "--name", "Demo Tool", "--kind", "tool"}); err != nil {
+		t.Fatalf("runPluginCommand new normalized: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join("plugins", "demo-tool", "plugin.json"))
+	if err != nil {
+		t.Fatalf("ReadFile manifest: %v", err)
+	}
+	var manifest plugin.Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("Unmarshal manifest: %v", err)
+	}
+	if manifest.Name != "demo-tool" {
+		t.Fatalf("expected normalized manifest name, got %q", manifest.Name)
+	}
+}
