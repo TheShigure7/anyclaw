@@ -34,6 +34,14 @@ func runAnyClawCLI(args []string) error {
 		return runPluginCommand(args[1:])
 	case "channels":
 		return runChannelsCommand(args[1:])
+	case "status":
+		return runStatusCommand(args[1:])
+	case "health":
+		return runHealthCommand(args[1:])
+	case "sessions":
+		return runSessionsCommand(args[1:])
+	case "approvals":
+		return runApprovalsCommand(args[1:])
 	case "skill", "skills":
 		return runSkillCommand(args[1:])
 	case "doctor":
@@ -55,6 +63,10 @@ Usage:
   anyclaw models <subcommand>         Run model management commands
   anyclaw plugin <subcommand>         Run plugin management commands
   anyclaw channels <subcommand>       Run channels management commands
+  anyclaw status [options]            Show gateway runtime status
+  anyclaw health [options]            Show gateway health summary
+  anyclaw sessions [options]          List recent sessions
+  anyclaw approvals <subcommand>      Manage pending approvals
   anyclaw skill <subcommand>          Run skill management commands
   anyclaw doctor [options]            Run configuration diagnostics
   anyclaw onboard/setup [options]     Run first-run model onboarding
