@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -31,6 +32,8 @@ func runAnyClawCLI(args []string) error {
 		return runPluginCommand(args[1:])
 	case "skill", "skills":
 		return runSkillCommand(args[1:])
+	case "gateway":
+		return runGatewayCommand(context.Background(), args[1:])
 	default:
 		printCLIUsage()
 		return fmt.Errorf("unknown command: %s", args[0])
@@ -44,6 +47,7 @@ Usage:
   anyclaw models <subcommand>         Run model management commands
   anyclaw plugin <subcommand>         Run plugin management commands
   anyclaw skill <subcommand>          Run skill management commands
+  anyclaw gateway <subcommand>        Run gateway management commands
 `)
 }
 
