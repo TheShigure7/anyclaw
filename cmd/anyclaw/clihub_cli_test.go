@@ -59,6 +59,8 @@ func TestCLIHubUsageDocumentsCwdBehavior(t *testing.T) {
 	}
 	for _, want := range []string{
 		"--cwd <path>        Working directory override for installed executables",
+		"clihub install requires an explicit trusted root via --root or ANYCLAW_CLI_ANYTHING_ROOT.",
+		"Install does not execute catalog shell from roots discovered implicitly from the current workspace.",
 		"Source harnesses always run from their checkout directory",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -184,6 +186,43 @@ func TestRunCLIHubInstallSupportsAlreadyInstalledAndCatalogEntries(t *testing.T)
 	}
 	if !strings.Contains(stdout, "Installed catalog-only") {
 		t.Fatalf("expected install success output, got %q", stdout)
+	}
+}
+
+func TestRunCLIHubInstallRejectsImplicitRootDiscovery(t *testing.T) {
+	root := writeCLIHubTestRoot(t)
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("Chdir root: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	_, _, err = captureCLIOutput(t, func() error {
+		return runCLIHubInstall([]string{"catalog-only"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "explicit trusted root") {
+		t.Fatalf("expected trusted root error, got %v", err)
+	}
+}
+
+func TestRunCLIHubInstallAllowsExplicitEnvRoot(t *testing.T) {
+	root := writeCLIHubTestRoot(t)
+	t.Setenv(clihub.EnvRoot, root)
+
+	stdout, _, err := captureCLIOutput(t, func() error {
+		return runCLIHubInstall([]string{"helper"})
+	})
+	if err != nil {
+		t.Fatalf("runCLIHubInstall env root: %v", err)
+	}
+	if !strings.Contains(stdout, "helper is already installed") {
+		t.Fatalf("expected env-root install output, got %q", stdout)
 	}
 }
 

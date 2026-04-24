@@ -59,6 +59,8 @@ Flags:
   --cwd <path>        Working directory override for installed executables
 
 Notes:
+  clihub install requires an explicit trusted root via --root or ANYCLAW_CLI_ANYTHING_ROOT.
+  Install does not execute catalog shell from roots discovered implicitly from the current workspace.
   Source harnesses always run from their checkout directory so local module imports resolve correctly.
 `)
 }
@@ -243,11 +245,7 @@ func runCLIHubInstall(args []string) error {
 		return fmt.Errorf("usage: anyclaw clihub install <name>")
 	}
 
-	root, err := resolveCLIHubRoot(*rootFlag, *workspaceFlag)
-	if err != nil {
-		return err
-	}
-	cat, err := clihub.Load(root)
+	cat, err := loadTrustedCLIHubInstallCatalog(*rootFlag, *workspaceFlag)
 	if err != nil {
 		return err
 	}
@@ -264,6 +262,30 @@ func runCLIHubInstall(args []string) error {
 	}
 	fmt.Printf("Installed %s\n", item.Name)
 	return nil
+}
+
+func loadTrustedCLIHubInstallCatalog(root string, workspace string) (*clihub.Catalog, error) {
+	if explicitRoot := strings.TrimSpace(root); explicitRoot != "" {
+		cat, err := clihub.Load(explicitRoot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load CLI-Anything root %q: %w", explicitRoot, err)
+		}
+		return cat, nil
+	}
+
+	if envRoot := strings.TrimSpace(os.Getenv(clihub.EnvRoot)); envRoot != "" {
+		cat, err := clihub.Load(envRoot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load CLI-Anything root from %s=%q: %w", clihub.EnvRoot, envRoot, err)
+		}
+		return cat, nil
+	}
+
+	if strings.TrimSpace(workspace) != "" {
+		return nil, fmt.Errorf("clihub install requires an explicit trusted root; --workspace only supports read-only discovery, pass --root <path> or set %s", clihub.EnvRoot)
+	}
+
+	return nil, fmt.Errorf("clihub install requires an explicit trusted root; pass --root <path> or set %s", clihub.EnvRoot)
 }
 
 func runCLIHubInfo(args []string) error {
