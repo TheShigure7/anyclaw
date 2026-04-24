@@ -45,13 +45,13 @@ func printCLIHubUsage() {
 	fmt.Print(`AnyClaw clihub commands:
 
 Usage:
-  anyclaw clihub search [query] [--category <name>] [--installed] [--json]
-  anyclaw clihub list [--installed] [--runnable] [--limit <n>] [--json]
+  anyclaw clihub search [query] [--category <name>] [--installed] [--limit <n>] [--json] [--workspace <path>]
+  anyclaw clihub list [--installed] [--runnable] [--limit <n>] [--json] [--workspace <path>]
   anyclaw clihub install <name> [--root <path>]
-  anyclaw clihub installed [--json]
-  anyclaw clihub info <name> [--json]
-  anyclaw clihub capabilities [query] [--harness <name>] [--limit <n>] [--json]
-  anyclaw clihub exec <name> [--json=true|false] [--auto-install] [--cwd <path>] [-- <args...>]
+  anyclaw clihub installed [--json] [--workspace <path>]
+  anyclaw clihub info <name> [--json] [--workspace <path>]
+  anyclaw clihub capabilities [query] [--harness <name>] [--limit <n>] [--json] [--workspace <path>]
+  anyclaw clihub exec <name> [--json=true|false] [--auto-install] [--cwd <path>] [--workspace <path>] [-- <args...>]
 
 Flags:
   --root <path>       Explicit CLI-Anything root

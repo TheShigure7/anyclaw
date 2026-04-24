@@ -69,6 +69,28 @@ func TestCLIHubUsageDocumentsCwdBehavior(t *testing.T) {
 	}
 }
 
+func TestCLIHubUsageDocumentsSearchLimitAndWorkspace(t *testing.T) {
+	stdout, _, err := captureCLIOutput(t, func() error {
+		return runCLIHubCommand([]string{"help"})
+	})
+	if err != nil {
+		t.Fatalf("runCLIHubCommand help: %v", err)
+	}
+
+	for _, want := range []string{
+		"anyclaw clihub search [query] [--category <name>] [--installed] [--limit <n>] [--json] [--workspace <path>]",
+		"anyclaw clihub list [--installed] [--runnable] [--limit <n>] [--json] [--workspace <path>]",
+		"anyclaw clihub installed [--json] [--workspace <path>]",
+		"anyclaw clihub info <name> [--json] [--workspace <path>]",
+		"anyclaw clihub capabilities [query] [--harness <name>] [--limit <n>] [--json] [--workspace <path>]",
+		"anyclaw clihub exec <name> [--json=true|false] [--auto-install] [--cwd <path>] [--workspace <path>] [-- <args...>]",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected %q in clihub help, got %q", want, stdout)
+		}
+	}
+}
+
 func TestRunCLIHubCommandUnknownSubcommandPrintsUsage(t *testing.T) {
 	stdout, _, err := captureCLIOutput(t, func() error {
 		return runCLIHubCommand([]string{"unknown"})
