@@ -311,6 +311,61 @@ func TestVecStoreListSortsNumericIDsNumerically(t *testing.T) {
 	}
 }
 
+func TestVecStoreListRebuildsRegistryForExistingCollection(t *testing.T) {
+	path := t.TempDir()
+	ctx := context.Background()
+
+	db, err := chromem.NewPersistentDB(path, false)
+	if err != nil {
+		t.Fatalf("open persistent chromem db: %v", err)
+	}
+
+	col, err := db.CreateCollection("legacy_vectors", map[string]string{
+		"distance":   "cosine",
+		"dimensions": "2",
+		"backend":    "chromem-go",
+	}, nil)
+	if err != nil {
+		t.Fatalf("create legacy collection: %v", err)
+	}
+
+	if err := col.AddDocuments(ctx, []chromem.Document{
+		{ID: "10", Embedding: normalized([]float32{1, 0})},
+		{ID: "2", Embedding: normalized([]float32{0, 1})},
+		{ID: "1", Embedding: normalized([]float32{1, 1})},
+	}, 1); err != nil {
+		t.Fatalf("seed legacy collection: %v", err)
+	}
+
+	vs := NewVecStore(VecStoreConfig{
+		TableName:   "legacy_vectors",
+		Dimensions:  2,
+		PersistPath: path,
+	})
+
+	limited, err := vs.List(ctx, 1)
+	if err != nil {
+		t.Fatalf("list legacy collection with rebuilt registry: %v", err)
+	}
+	if len(limited) != 1 {
+		t.Fatalf("expected 1 limited item, got %d", len(limited))
+	}
+	if limited[0].RowID != 1 {
+		t.Fatalf("expected numeric first rowid 1 after registry rebuild, got %+v", limited)
+	}
+
+	items, err := vs.List(ctx, 10)
+	if err != nil {
+		t.Fatalf("list legacy collection after rebuild: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items after registry rebuild, got %d", len(items))
+	}
+	if items[0].RowID != 1 || items[1].RowID != 2 || items[2].RowID != 10 {
+		t.Fatalf("expected rebuilt registry order [1 2 10], got %+v", items)
+	}
+}
+
 func TestVecStoreDimensionMismatch(t *testing.T) {
 	vs := setupVecStore(t)
 	ctx := context.Background()

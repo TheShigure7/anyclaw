@@ -292,18 +292,19 @@ func (im *IndexManager) Delete(ctx context.Context, name string) error {
 
 func (im *IndexManager) Get(name string) (*IndexInfo, error) {
 	im.mu.RLock()
-	defer im.mu.RUnlock()
-
 	info, exists := im.indexes[name]
 	if !exists {
+		im.mu.RUnlock()
 		return nil, fmt.Errorf("index %q not found", name)
 	}
+	cloned := cloneIndexInfo(info)
+	im.mu.RUnlock()
 
-	if count, err := im.countVectors(context.Background(), info); err == nil {
-		info.VectorCount = count
+	if count, err := im.countVectors(context.Background(), cloned); err == nil {
+		cloned.VectorCount = count
 	}
 
-	return info, nil
+	return cloned, nil
 }
 
 func (im *IndexManager) List() []*IndexInfo {
@@ -312,7 +313,7 @@ func (im *IndexManager) List() []*IndexInfo {
 
 	result := make([]*IndexInfo, 0, len(im.indexes))
 	for _, info := range im.indexes {
-		result = append(result, info)
+		result = append(result, cloneIndexInfo(info))
 	}
 	return result
 }
@@ -353,7 +354,10 @@ func (im *IndexManager) Index(ctx context.Context, indexName string, items []Ind
 		batch := items[i:end]
 
 		vecItems := make([]vec.VecItem, 0, len(batch))
-		for _, item := range batch {
+		pendingOffsets := make([]int, 0, len(batch))
+		pendingItems := make([]IndexItem, 0, len(batch))
+		pendingTexts := make([]string, 0, len(batch))
+		for offset, item := range batch {
 			if item.Vector != nil {
 				vecItems = append(vecItems, vec.VecItem{
 					ID:       item.ID,
@@ -368,27 +372,51 @@ func (im *IndexManager) Index(ctx context.Context, indexName string, items []Ind
 				continue
 			}
 
-			emb, err := im.embedder.Embed(ctx, item.Text)
+			pendingOffsets = append(pendingOffsets, offset)
+			pendingItems = append(pendingItems, item)
+			pendingTexts = append(pendingTexts, item.Text)
+		}
+
+		if len(pendingTexts) > 0 {
+			embeddings, err := im.embedder.EmbedBatch(ctx, pendingTexts)
 			if err != nil {
-				result.Failed++
-				if progress != nil {
-					progress(Progress{
-						Total:     len(items),
-						Processed: i + 1,
-						Failed:    result.Failed,
-						Elapsed:   time.Since(start),
-						CurrentID: item.ID,
-						Message:   fmt.Sprintf("embed failed: %v", err),
+				for idx, item := range pendingItems {
+					result.Failed++
+					if progress != nil {
+						progress(Progress{
+							Total:     len(items),
+							Processed: i + pendingOffsets[idx] + 1,
+							Failed:    result.Failed,
+							Elapsed:   time.Since(start),
+							CurrentID: item.ID,
+							Message:   fmt.Sprintf("embed failed: %v", err),
+						})
+					}
+				}
+			} else if len(embeddings) != len(pendingItems) {
+				err := fmt.Errorf("embed batch returned %d embeddings for %d texts", len(embeddings), len(pendingItems))
+				for idx, item := range pendingItems {
+					result.Failed++
+					if progress != nil {
+						progress(Progress{
+							Total:     len(items),
+							Processed: i + pendingOffsets[idx] + 1,
+							Failed:    result.Failed,
+							Elapsed:   time.Since(start),
+							CurrentID: item.ID,
+							Message:   fmt.Sprintf("embed failed: %v", err),
+						})
+					}
+				}
+			} else {
+				for idx, item := range pendingItems {
+					vecItems = append(vecItems, vec.VecItem{
+						ID:       item.ID,
+						Vector:   embeddings[idx],
+						Metadata: item.Metadata,
 					})
 				}
-				continue
 			}
-
-			vecItems = append(vecItems, vec.VecItem{
-				ID:       item.ID,
-				Vector:   emb,
-				Metadata: item.Metadata,
-			})
 		}
 
 		if len(vecItems) > 0 {
@@ -596,6 +624,17 @@ func (im *IndexManager) resolvedVectorDir() string {
 		return im.vecDir
 	}
 	return sqlite.SidecarDirForSQLDB(context.Background(), im.db, "vec")
+}
+
+func cloneIndexInfo(info *IndexInfo) *IndexInfo {
+	if info == nil {
+		return nil
+	}
+
+	cloned := *info
+	cloned.Metadata = append([]string(nil), info.Metadata...)
+	cloned.AuxColumns = append([]string(nil), info.AuxColumns...)
+	return &cloned
 }
 
 func (im *IndexManager) newVecStore(info *IndexInfo) *vec.VecStore {

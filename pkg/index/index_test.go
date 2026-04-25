@@ -101,6 +101,51 @@ func TestGetIndex(t *testing.T) {
 	}
 }
 
+func TestGetAndListReturnClonedIndexInfo(t *testing.T) {
+	im, _ := setupIndexManager(t)
+	ctx := context.Background()
+
+	_, _ = im.Create(ctx, Config{
+		Name:       "clone_test",
+		Dimensions: 4,
+		Metadata:   []string{"tag"},
+		AuxColumns: []string{"aux"},
+	})
+
+	got, err := im.Get("clone_test")
+	if err != nil {
+		t.Fatalf("get clone_test: %v", err)
+	}
+	got.Status = StatusError
+	got.VectorCount = 99
+	got.Metadata[0] = "mutated"
+	got.AuxColumns[0] = "mutated"
+
+	listed := im.List()
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 listed index, got %d", len(listed))
+	}
+	listed[0].Metadata[0] = "listed"
+	listed[0].AuxColumns[0] = "listed"
+
+	refreshed, err := im.Get("clone_test")
+	if err != nil {
+		t.Fatalf("get refreshed clone_test: %v", err)
+	}
+	if refreshed.Status != StatusReady {
+		t.Fatalf("expected stored status ready, got %s", refreshed.Status)
+	}
+	if refreshed.VectorCount != 0 {
+		t.Fatalf("expected stored vector count 0, got %d", refreshed.VectorCount)
+	}
+	if len(refreshed.Metadata) != 1 || refreshed.Metadata[0] != "tag" {
+		t.Fatalf("expected stored metadata [tag], got %v", refreshed.Metadata)
+	}
+	if len(refreshed.AuxColumns) != 1 || refreshed.AuxColumns[0] != "aux" {
+		t.Fatalf("expected stored aux columns [aux], got %v", refreshed.AuxColumns)
+	}
+}
+
 func TestListIndexes(t *testing.T) {
 	im, _ := setupIndexManager(t)
 	ctx := context.Background()
@@ -241,8 +286,11 @@ func TestIndexWithEmbedding(t *testing.T) {
 	if result.Indexed != 2 {
 		t.Errorf("expected 2 indexed, got %d", result.Indexed)
 	}
-	if embedder.callCount.Load() != 2 {
-		t.Errorf("expected 2 embed calls, got %d", embedder.callCount.Load())
+	if embedder.batchCalls.Load() != 1 {
+		t.Errorf("expected 1 batch embed call, got %d", embedder.batchCalls.Load())
+	}
+	if embedder.embedCalls.Load() != 0 {
+		t.Errorf("expected 0 single embed calls during batch indexing, got %d", embedder.embedCalls.Load())
 	}
 }
 
@@ -269,8 +317,58 @@ func TestIndexMixedVectorsAndText(t *testing.T) {
 	if result.Indexed != 3 {
 		t.Errorf("expected 3 indexed, got %d", result.Indexed)
 	}
-	if embedder.callCount.Load() != 1 {
-		t.Errorf("expected 1 embed call, got %d", embedder.callCount.Load())
+	if embedder.batchCalls.Load() != 1 {
+		t.Errorf("expected 1 batch embed call, got %d", embedder.batchCalls.Load())
+	}
+	if embedder.embedCalls.Load() != 0 {
+		t.Errorf("expected 0 single embed calls during batch indexing, got %d", embedder.embedCalls.Load())
+	}
+}
+
+func TestIndexBatchEmbedFailureProgressUsesItemOffsets(t *testing.T) {
+	db, err := sqlite.Open(sqlite.InMemoryConfig())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	ctx := context.Background()
+	im := NewIndexManager(db.DB, &failingEmbedder{
+		dim: 4,
+		err: errors.New("embed failed"),
+	}, WithVectorDir(t.TempDir()))
+	if err := im.Init(ctx); err != nil {
+		t.Fatalf("init index manager: %v", err)
+	}
+	if _, err := im.Create(ctx, Config{Name: "batch_embed_fail", Dimensions: 4}); err != nil {
+		t.Fatalf("create index: %v", err)
+	}
+
+	var processed []int
+	result, err := im.Index(ctx, "batch_embed_fail", []IndexItem{
+		{ID: 1, Text: "a"},
+		{ID: 2, Text: "b"},
+		{ID: 3, Text: "c"},
+	}, func(p Progress) {
+		if p.Message == "embed failed: embed failed" {
+			processed = append(processed, p.Processed)
+		}
+	})
+	if err != nil {
+		t.Fatalf("index with failed batch embed should not return error, got %v", err)
+	}
+	if result.Failed != 3 {
+		t.Fatalf("expected 3 failed items, got %+v", result)
+	}
+	if len(processed) != 3 {
+		t.Fatalf("expected 3 progress updates, got %v", processed)
+	}
+	for i, got := range processed {
+		if got != i+1 {
+			t.Fatalf("expected processed offsets [1 2 3], got %v", processed)
+		}
 	}
 }
 
@@ -725,27 +823,29 @@ func TestIndexUsesSQLiteSidecarWhenVectorDirUnset(t *testing.T) {
 }
 
 type mockEmbedder struct {
-	dim       int
-	callCount atomic.Int32
+	dim        int
+	embedCalls atomic.Int32
+	batchCalls atomic.Int32
 }
 
 func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
-	m.callCount.Add(1)
+	m.embedCalls.Add(1)
+	return m.embeddingForText(text), nil
+}
+
+func (m *mockEmbedder) embeddingForText(text string) []float32 {
 	result := make([]float32, m.dim)
 	for i := range result {
 		result[i] = float32(len(text)) / float32(m.dim)
 	}
-	return result, nil
+	return result
 }
 
 func (m *mockEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	m.batchCalls.Add(1)
 	var results [][]float32
 	for _, text := range texts {
-		emb, err := m.Embed(ctx, text)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, emb)
+		results = append(results, m.embeddingForText(text))
 	}
 	return results, nil
 }

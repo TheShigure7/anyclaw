@@ -1,14 +1,11 @@
 package vec
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +40,8 @@ type VecStore struct {
 	mu         sync.Mutex
 	chromemDB  *chromem.DB
 	collection *chromem.Collection
+
+	ephemeralRegistry map[string]struct{}
 }
 
 type VecStoreConfig struct {
@@ -100,6 +99,10 @@ func (vs *VecStore) Insert(ctx context.Context, id any, vector []float32, metada
 		return fmt.Errorf("insert vector: %w", err)
 	}
 
+	if err := vs.upsertRegistryIDs(ctx, []string{docID}); err != nil {
+		return fmt.Errorf("update vector registry: %w", err)
+	}
+
 	return nil
 }
 
@@ -133,6 +136,14 @@ func (vs *VecStore) InsertBatch(ctx context.Context, items []VecItem) error {
 
 	if err := col.AddDocuments(ctx, docs, 1); err != nil {
 		return fmt.Errorf("insert batch: %w", err)
+	}
+
+	docIDs := make([]string, 0, len(docs))
+	for _, doc := range docs {
+		docIDs = append(docIDs, doc.ID)
+	}
+	if err := vs.upsertRegistryIDs(ctx, docIDs); err != nil {
+		return fmt.Errorf("update vector registry: %w", err)
 	}
 
 	return nil
@@ -221,6 +232,10 @@ func (vs *VecStore) Delete(ctx context.Context, id any) error {
 		return fmt.Errorf("delete vector item: %w", err)
 	}
 
+	if err := vs.deleteRegistryIDs(ctx, []string{docID}); err != nil {
+		return fmt.Errorf("delete vector registry item: %w", err)
+	}
+
 	return nil
 }
 
@@ -268,86 +283,67 @@ func (vs *VecStore) Count(ctx context.Context) (int64, error) {
 }
 
 func (vs *VecStore) List(ctx context.Context, limit int) ([]VecItem, error) {
-	_ = ctx
-
 	db, err := vs.ensureDB()
 	if err != nil {
 		return nil, err
 	}
-	if _, err := vs.ensureCollection(context.Background(), false); err != nil {
+	col, err := vs.ensureCollection(ctx, false)
+	if err != nil {
 		return nil, err
 	}
 
-	var buf bytes.Buffer
-	if err := db.ExportToWriter(&buf, false, "", vs.tableName); err != nil {
-		return nil, fmt.Errorf("export collection: %w", err)
-	}
-
-	type persistenceCollection struct {
-		Name      string
-		Metadata  map[string]string
-		Documents map[string]*chromem.Document
-	}
-	persistenceDB := struct {
-		Collections map[string]*persistenceCollection
-	}{}
-
-	if err := gob.NewDecoder(&buf).Decode(&persistenceDB); err != nil {
-		return nil, fmt.Errorf("decode collection export: %w", err)
-	}
-
-	pc, ok := persistenceDB.Collections[vs.tableName]
-	if !ok || len(pc.Documents) == 0 {
+	count := col.Count()
+	if count == 0 {
 		return nil, nil
 	}
 
-	ids := make([]string, 0, len(pc.Documents))
-	for id := range pc.Documents {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		return lessDocumentID(ids[i], ids[j])
-	})
-
-	if limit > 0 && limit < len(ids) {
-		ids = ids[:limit]
+	if err := vs.ensureRegistryUpToDate(ctx, db, count); err != nil {
+		return nil, err
 	}
 
-	items := make([]VecItem, 0, len(ids))
-	for _, id := range ids {
-		doc := pc.Documents[id]
-		if doc == nil {
-			continue
-		}
-		items = append(items, vecItemFromDocument(*doc))
+	items, stale, err := vs.listItemsFromRegistry(ctx, col, limit)
+	if err != nil {
+		return nil, err
+	}
+	if !stale {
+		return items, nil
 	}
 
-	return items, nil
+	if err := vs.rebuildRegistry(ctx, db); err != nil {
+		return nil, err
+	}
+	items, _, err = vs.listItemsFromRegistry(ctx, col, limit)
+	return items, err
 }
 
 func (vs *VecStore) Drop(ctx context.Context) error {
-	_ = ctx
-
 	vs.mu.Lock()
-	defer vs.mu.Unlock()
-
 	if err := vs.validateTableName(); err != nil {
+		vs.mu.Unlock()
 		return err
 	}
 
 	if vs.chromemDB == nil {
 		db, err := vs.openDB()
 		if err != nil {
+			vs.mu.Unlock()
 			return err
 		}
 		vs.chromemDB = db
 	}
 
 	if err := vs.chromemDB.DeleteCollection(vs.tableName); err != nil {
+		vs.mu.Unlock()
 		return fmt.Errorf("drop vector collection: %w", err)
 	}
 
 	vs.collection = nil
+	vs.ephemeralRegistry = nil
+	vs.mu.Unlock()
+
+	if err := vs.clearRegistry(ctx); err != nil {
+		return fmt.Errorf("drop vector registry: %w", err)
+	}
 	return nil
 }
 
