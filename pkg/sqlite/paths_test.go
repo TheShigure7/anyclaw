@@ -2,15 +2,17 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
 
 func TestSidecarDirFileDB(t *testing.T) {
-	db := &DB{cfg: Config{DSN: `C:\tmp\anyclaw.db`}}
+	dbPath := filepath.Join("tmp", "anyclaw.db")
+	db := &DB{cfg: Config{DSN: dbPath}}
 
 	got := db.SidecarDir("vec")
-	want := `C:\tmp\anyclaw.vec`
+	want := filepath.Join("tmp", "anyclaw.vec")
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -42,13 +44,14 @@ func TestSidecarDirNilAndMemoryVariants(t *testing.T) {
 }
 
 func TestSidecarDirFileDSNVariants(t *testing.T) {
-	db := &DB{cfg: Config{DSN: `file:C:\tmp\anyclaw.db?cache=shared`}}
+	dbPath := filepath.Join("tmp", "anyclaw.db")
+	db := &DB{cfg: Config{DSN: fmt.Sprintf("file:%s?cache=shared", dbPath)}}
 
-	if got := db.SidecarDir(""); got != `C:\tmp\anyclaw` {
-		t.Fatalf("expected base sidecar path %q, got %q", `C:\tmp\anyclaw`, got)
+	if got := db.SidecarDir(""); got != filepath.Join("tmp", "anyclaw") {
+		t.Fatalf("expected base sidecar path %q, got %q", filepath.Join("tmp", "anyclaw"), got)
 	}
-	if got := db.SidecarDir("vec"); got != `C:\tmp\anyclaw.vec` {
-		t.Fatalf("expected vec sidecar path %q, got %q", `C:\tmp\anyclaw.vec`, got)
+	if got := db.SidecarDir("vec"); got != filepath.Join("tmp", "anyclaw.vec") {
+		t.Fatalf("expected vec sidecar path %q, got %q", filepath.Join("tmp", "anyclaw.vec"), got)
 	}
 }
 

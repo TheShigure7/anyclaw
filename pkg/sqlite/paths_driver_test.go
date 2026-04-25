@@ -125,16 +125,19 @@ func TestSidecarDirForSQLDBNilAndQueryError(t *testing.T) {
 }
 
 func TestSidecarDirForSQLDBSkipsInvalidAndNonMainRows(t *testing.T) {
+	mainDBPath := filepath.Join(t.TempDir(), "anyclaw.db")
+	ignoredPath := filepath.Join(t.TempDir(), "ignored.db")
+	auxPath := filepath.Join(t.TempDir(), "aux.db")
 	db := openFakeDatabaseListDB(t, fakeDatabaseListFixture{
 		rows: [][]driver.Value{
-			{"bad-seq", "main", `C:\ignored.db`},
-			{int64(1), "aux", `C:\aux.db`},
-			{int64(2), "main", `file:C:\work\anyclaw.db?cache=shared`},
+			{"bad-seq", "main", ignoredPath},
+			{int64(1), "aux", auxPath},
+			{int64(2), "main", fmt.Sprintf("file:%s?cache=shared", mainDBPath)},
 		},
 	})
 
 	got := SidecarDirForSQLDB(nil, db, "vec")
-	want := filepath.Join(`C:\work`, "anyclaw.vec")
+	want := filepath.Join(filepath.Dir(mainDBPath), "anyclaw.vec")
 	if got != want {
 		t.Fatalf("expected sidecar path %q, got %q", want, got)
 	}
@@ -143,8 +146,8 @@ func TestSidecarDirForSQLDBSkipsInvalidAndNonMainRows(t *testing.T) {
 func TestSidecarDirForSQLDBReturnsEmptyWithoutMainRow(t *testing.T) {
 	db := openFakeDatabaseListDB(t, fakeDatabaseListFixture{
 		rows: [][]driver.Value{
-			{int64(1), "temp", `C:\temp.db`},
-			{int64(2), "aux", `C:\aux.db`},
+			{int64(1), "temp", filepath.Join(t.TempDir(), "temp.db")},
+			{int64(2), "aux", filepath.Join(t.TempDir(), "aux.db")},
 		},
 	})
 
