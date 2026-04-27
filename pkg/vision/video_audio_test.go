@@ -1,6 +1,9 @@
 package vision
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAppendKeyFrameToSceneMutatesOriginalScene(t *testing.T) {
 	scenes := []SceneInfo{
@@ -35,5 +38,24 @@ func TestAppendKeyFrameToSceneIgnoresOutOfRangeIndex(t *testing.T) {
 
 	if len(scenes[0].KeyFrames) != 0 {
 		t.Fatalf("expected no key frames to be appended for invalid indices, got %d", len(scenes[0].KeyFrames))
+	}
+}
+
+func TestValidateFrameIntervalSecondsRejectsNonPositiveValues(t *testing.T) {
+	cases := []float64{0, -1, -0.5}
+	for _, interval := range cases {
+		err := validateFrameIntervalSeconds(interval)
+		if err == nil {
+			t.Fatalf("expected interval %v to be rejected", interval)
+		}
+		if !strings.Contains(err.Error(), "intervalSeconds must be > 0") {
+			t.Fatalf("expected interval validation error, got %v", err)
+		}
+	}
+}
+
+func TestValidateFrameIntervalSecondsAcceptsPositiveValue(t *testing.T) {
+	if err := validateFrameIntervalSeconds(0.25); err != nil {
+		t.Fatalf("expected positive interval to be accepted, got %v", err)
 	}
 }

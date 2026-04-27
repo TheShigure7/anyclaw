@@ -149,6 +149,10 @@ func (e *KeyFrameExtractor) ExtractFrameAt(ctx context.Context, videoData []byte
 }
 
 func (e *KeyFrameExtractor) ExtractFramesAtIntervals(ctx context.Context, videoData []byte, intervalSeconds float64) ([][]byte, error) {
+	if err := validateFrameIntervalSeconds(intervalSeconds); err != nil {
+		return nil, err
+	}
+
 	if !e.isFFmpegAvailable(ctx) {
 		return nil, fmt.Errorf("ffmpeg not available")
 	}
@@ -363,6 +367,13 @@ func appendKeyFrameToScene(scenes []SceneInfo, sceneIndex int, keyFrame KeyFrame
 		return
 	}
 	scenes[sceneIndex].KeyFrames = append(scenes[sceneIndex].KeyFrames, keyFrame)
+}
+
+func validateFrameIntervalSeconds(intervalSeconds float64) error {
+	if intervalSeconds <= 0 {
+		return fmt.Errorf("intervalSeconds must be > 0")
+	}
+	return nil
 }
 
 type AudioAnalysisResult struct {
