@@ -76,6 +76,11 @@ func (c *Client) create(ctx context.Context, args []string) (string, error) {
 }
 
 func (c *Client) addFile(writer *zip.Writer, path string) error {
+	entryName, err := archiveEntryName(path)
+	if err != nil {
+		return err
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -92,7 +97,7 @@ func (c *Client) addFile(writer *zip.Writer, path string) error {
 		return err
 	}
 
-	header.Name = filepath.Base(path)
+	header.Name = entryName
 
 	entry, err := writer.CreateHeader(header)
 	if err != nil {
@@ -290,6 +295,49 @@ func ListZIP(archive string) ([]string, error) {
 		files[i] = file.Name
 	}
 	return files, nil
+}
+
+func archiveEntryName(path string) (string, error) {
+	cleanPath := filepath.Clean(path)
+	if cleanPath == "." || cleanPath == "" {
+		return "", fmt.Errorf("unsafe archive entry path: %s", path)
+	}
+	if filepath.IsAbs(cleanPath) || filepath.VolumeName(cleanPath) != "" {
+		cleanPath = archiveNameForAbsolutePath(cleanPath)
+	}
+	if cleanPath == "" {
+		return "", fmt.Errorf("unsafe archive entry path: %s", path)
+	}
+
+	entryName := filepath.ToSlash(cleanPath)
+	for _, part := range strings.Split(entryName, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", fmt.Errorf("unsafe archive entry path: %s", path)
+		}
+	}
+	return entryName, nil
+}
+
+func archiveNameForAbsolutePath(path string) string {
+	workingDir, err := os.Getwd()
+	if err == nil {
+		if rel, err := filepath.Rel(workingDir, path); err == nil && isSafeRelativeArchivePath(rel) {
+			return rel
+		}
+	}
+	return filepath.Base(path)
+}
+
+func isSafeRelativeArchivePath(path string) bool {
+	if path == "." || path == "" || filepath.IsAbs(path) || filepath.VolumeName(path) != "" {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Clean(path)), "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 func safeExtractPath(dest, name string) (string, error) {

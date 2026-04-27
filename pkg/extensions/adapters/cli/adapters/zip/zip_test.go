@@ -53,6 +53,78 @@ func TestRunCreateListAndExtract(t *testing.T) {
 	}
 }
 
+func TestRunCreatePreservesDirectoryStructure(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.MkdirAll(filepath.Join("dir1"), 0o755); err != nil {
+		t.Fatalf("MkdirAll dir1: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join("dir2"), 0o755); err != nil {
+		t.Fatalf("MkdirAll dir2: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join("dir1", "a.txt"), []byte("one"), 0o644); err != nil {
+		t.Fatalf("WriteFile dir1: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join("dir2", "a.txt"), []byte("two"), 0o644); err != nil {
+		t.Fatalf("WriteFile dir2: %v", err)
+	}
+
+	client := NewClient(Config{})
+	firstPath, err := filepath.Abs(filepath.Join("dir1", "a.txt"))
+	if err != nil {
+		t.Fatalf("Abs first: %v", err)
+	}
+	secondPath, err := filepath.Abs(filepath.Join("dir2", "a.txt"))
+	if err != nil {
+		t.Fatalf("Abs second: %v", err)
+	}
+	if _, err := client.Run(context.Background(), []string{"create", "bundle.zip", firstPath, secondPath}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	files, err := ListZIP("bundle.zip")
+	if err != nil {
+		t.Fatalf("ListZIP: %v", err)
+	}
+	if strings.Join(files, ",") != "dir1/a.txt,dir2/a.txt" {
+		t.Fatalf("files = %v, want preserved relative directories", files)
+	}
+
+	dest := filepath.Join(dir, "out")
+	if _, err := client.Run(context.Background(), []string{"extract", "bundle.zip", dest}); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	first, err := os.ReadFile(filepath.Join(dest, "dir1", "a.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile dir1: %v", err)
+	}
+	second, err := os.ReadFile(filepath.Join(dest, "dir2", "a.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile dir2: %v", err)
+	}
+	if string(first) != "one" || string(second) != "two" {
+		t.Fatalf("contents = %q/%q, want one/two", first, second)
+	}
+}
+
+func TestRunCreateRejectsUnsafeArchiveEntryName(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "secret.txt")
+	archive := filepath.Join(dir, "bundle.zip")
+	if err := os.WriteFile(source, []byte("secret"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Chdir(filepath.Join(dir))
+
+	_, err := NewClient(Config{}).Run(context.Background(), []string{"create", archive, filepath.Join("..", "secret.txt")})
+	if err == nil {
+		t.Fatal("expected unsafe archive entry error")
+	}
+	if !strings.Contains(err.Error(), "unsafe archive entry path") {
+		t.Fatalf("error = %v, want unsafe archive entry", err)
+	}
+}
+
 func TestExtractRejectsZipSlipPath(t *testing.T) {
 	dir := t.TempDir()
 	archive := filepath.Join(dir, "malicious.zip")
