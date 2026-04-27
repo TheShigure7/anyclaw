@@ -46,6 +46,8 @@ type KeyFrameExtractor struct {
 	maxKeyFrames   int
 }
 
+var execCommandContext = exec.CommandContext
+
 func NewKeyFrameExtractor() *KeyFrameExtractor {
 	return &KeyFrameExtractor{
 		ffmpegPath:     "ffmpeg",
@@ -189,7 +191,7 @@ func (e *KeyFrameExtractor) detectScenes(ctx context.Context, input string, dura
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, e.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, e.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("scene detection: %w", err)
@@ -254,7 +256,7 @@ func (e *KeyFrameExtractor) extractFrameAt(ctx context.Context, input string, ti
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, e.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, e.ffmpegPath, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = nil
@@ -279,7 +281,7 @@ func (e *KeyFrameExtractor) probeVideo(ctx context.Context, input string) (*Vide
 		input,
 	}
 
-	cmd := exec.CommandContext(ctx, e.ffprobePath, args...)
+	cmd := execCommandContext(ctx, e.ffprobePath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe: %w", err)
@@ -327,7 +329,7 @@ func (e *KeyFrameExtractor) probeVideo(ctx context.Context, input string) (*Vide
 }
 
 func (e *KeyFrameExtractor) isFFmpegAvailable(ctx context.Context) bool {
-	cmd := exec.CommandContext(ctx, e.ffmpegPath, "-version")
+	cmd := execCommandContext(ctx, e.ffmpegPath, "-version")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
@@ -485,7 +487,7 @@ func (a *AudioAnalyzer) extractEnergyProfile(ctx context.Context, input string) 
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, a.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, a.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("energy extraction: %w", err)
@@ -513,7 +515,7 @@ func (a *AudioAnalyzer) detectSilence(ctx context.Context, input string) ([]Sile
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, a.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, a.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("silence detection: %w", err)
@@ -554,7 +556,7 @@ func (a *AudioAnalyzer) detectSpeech(ctx context.Context, input string) (float64
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, a.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, a.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0, fmt.Errorf("speech detection: %w", err)
@@ -595,7 +597,7 @@ func (a *AudioAnalyzer) detectMusic(ctx context.Context, input string, energyPro
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, a.ffmpegPath, args...)
+	cmd := execCommandContext(ctx, a.ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0, fmt.Errorf("music detection: %w", err)
@@ -637,7 +639,7 @@ func (a *AudioAnalyzer) probeAudio(ctx context.Context, input string) (*AudioAna
 		input,
 	}
 
-	cmd := exec.CommandContext(ctx, a.ffprobePath, args...)
+	cmd := execCommandContext(ctx, a.ffprobePath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe: %w", err)
@@ -689,7 +691,7 @@ func (a *AudioAnalyzer) probeAudio(ctx context.Context, input string) (*AudioAna
 }
 
 func (a *AudioAnalyzer) isFFmpegAvailable(ctx context.Context) bool {
-	cmd := exec.CommandContext(ctx, a.ffmpegPath, "-version")
+	cmd := execCommandContext(ctx, a.ffmpegPath, "-version")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
