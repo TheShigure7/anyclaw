@@ -26,6 +26,9 @@ func TestGetWorkflowJSONSchemaShape(t *testing.T) {
 	}
 
 	nodeProps := nodes["items"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := nodeProps["workflow"]; ok {
+		t.Fatal("node schema should not expose workflow until sub-workflow execution is supported")
+	}
 	nodeType := nodeProps["type"].(map[string]any)
 	enum := nodeType["enum"].([]string)
 	for _, want := range []string{"action", "condition", "loop", "parallel", "join"} {

@@ -274,7 +274,6 @@ func nodeSchema() map[string]any {
 			"description":    stringProperty("Optional node description."),
 			"plugin":         stringProperty("Plugin name for action nodes."),
 			"action":         stringProperty("Plugin action name for action nodes."),
-			"workflow":       stringProperty("Referenced workflow ID for workflow action nodes."),
 			"inputs":         freeformObjectProperty("Node input values."),
 			"outputs":        freeformStringMapProperty("Node output name mappings."),
 			"condition":      expressionSchema(),
