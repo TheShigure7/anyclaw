@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	cr "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/registry"
 )
 
 func TestInitRegistersBuiltinHandlers(t *testing.T) {
@@ -55,6 +57,14 @@ func TestInitRegistersBuiltinHandlers(t *testing.T) {
 	}
 	if !strings.Contains(output, "Usage: sqlite") {
 		t.Fatalf("sqlite output = %q, want usage", output)
+	}
+
+	adapter, ok := cr.GetBuiltinAdapter("ollama")
+	if !ok {
+		t.Fatal("expected ollama builtin adapter")
+	}
+	if adapter.Category != "ai" {
+		t.Fatalf("ollama category = %q, want ai", adapter.Category)
 	}
 }
 
