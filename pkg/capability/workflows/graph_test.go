@@ -192,14 +192,20 @@ func TestExecutionContextResolveInputs(t *testing.T) {
 		NodeID: "fetch",
 		Outputs: map[string]any{
 			"success": true,
+			"body": map[string]any{
+				"count": 3,
+			},
+			"body.flat": "flat-value",
 		},
 	}
 	node := &Node{
 		Inputs: map[string]any{
-			"path":    "$input_file",
-			"limit":   "$limit",
-			"ok":      "$fetch.success",
-			"missing": "$missing",
+			"path":        "$input_file",
+			"limit":       "$limit",
+			"ok":          "$fetch.success",
+			"nestedCount": "$fetch.body.count",
+			"flatKey":     "$fetch.body.flat",
+			"missing":     "$missing",
 			"nested": map[string]any{
 				"again": "$input_file",
 			},
@@ -216,6 +222,12 @@ func TestExecutionContextResolveInputs(t *testing.T) {
 	}
 	if resolved["ok"] != true {
 		t.Fatalf("ok = %v, want true", resolved["ok"])
+	}
+	if resolved["nestedCount"] != 3 {
+		t.Fatalf("nestedCount = %v, want 3", resolved["nestedCount"])
+	}
+	if resolved["flatKey"] != "flat-value" {
+		t.Fatalf("flatKey = %v, want flat-value", resolved["flatKey"])
 	}
 	if resolved["missing"] != "$missing" {
 		t.Fatalf("missing = %v, want unresolved reference", resolved["missing"])

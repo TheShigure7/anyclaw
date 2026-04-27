@@ -499,6 +499,9 @@ func (ctx *ExecutionContext) resolveReference(ref string) any {
 			if value, ok := state.Outputs[outputName]; ok {
 				return value
 			}
+			if value, ok := resolveNestedOutput(state.Outputs, outputName); ok {
+				return value
+			}
 		}
 	}
 	if value, ok := ctx.Variables[path]; ok {
@@ -508,6 +511,21 @@ func (ctx *ExecutionContext) resolveReference(ref string) any {
 		return value
 	}
 	return ref
+}
+
+func resolveNestedOutput(outputs map[string]any, path string) (any, bool) {
+	current := any(outputs)
+	for _, part := range strings.Split(path, ".") {
+		currentMap, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current, ok = currentMap[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
 }
 
 func (ctx *ExecutionContext) AddEvidence(evidenceType, content string, data map[string]any) {
