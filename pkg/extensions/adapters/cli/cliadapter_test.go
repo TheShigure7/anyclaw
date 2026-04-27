@@ -48,6 +48,14 @@ func TestInitRegistersBuiltinHandlers(t *testing.T) {
 	if !strings.Contains(output, "Usage: zip") {
 		t.Fatalf("zip output = %q, want usage", output)
 	}
+
+	output, err = Exec(context.Background(), "sqlite", nil)
+	if err != nil {
+		t.Fatalf("Exec sqlite: %v", err)
+	}
+	if !strings.Contains(output, "Usage: sqlite") {
+		t.Fatalf("sqlite output = %q, want usage", output)
+	}
 }
 
 func TestSearchAndListCategoriesAfterInit(t *testing.T) {

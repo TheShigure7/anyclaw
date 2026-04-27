@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	sqliteadapter "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/adapters/sqlite"
 	zipadapter "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/adapters/zip"
 	ce "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/exec"
 	cr "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/registry"
@@ -139,6 +140,10 @@ func registerBuiltInHandlers() {
 
 	registerBuiltinHandler("zip", "Create, list, extract, and update ZIP archives", "archive", func(ctx context.Context, args []string) (string, error) {
 		return zipadapter.NewClient(zipadapter.Config{}).Run(ctx, args)
+	})
+
+	registerBuiltinHandler("sqlite", "Run SQLite queries and inspection commands", "database", func(ctx context.Context, args []string) (string, error) {
+		return sqliteadapter.NewClient(sqliteadapter.Config{}).Run(ctx, args)
 	})
 }
 
