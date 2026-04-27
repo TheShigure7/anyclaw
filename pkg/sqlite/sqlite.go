@@ -79,6 +79,12 @@ func (db *DB) DSN() string {
 	return db.cfg.DSN
 }
 
+func (db *DB) isClosed() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.closed
+}
+
 func Open(cfg Config) (*DB, error) {
 	if cfg.DSN == "" {
 		cfg.DSN = ":memory:"
