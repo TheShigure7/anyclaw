@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,6 +39,14 @@ func TestInitRegistersBuiltinHandlers(t *testing.T) {
 	}
 	if output != time.Now().UTC().Format(time.DateOnly) {
 		t.Fatalf("date output = %q, want current UTC date", output)
+	}
+
+	output, err = Exec(context.Background(), "zip", nil)
+	if err != nil {
+		t.Fatalf("Exec zip: %v", err)
+	}
+	if !strings.Contains(output, "Usage: zip") {
+		t.Fatalf("zip output = %q, want usage", output)
 	}
 }
 

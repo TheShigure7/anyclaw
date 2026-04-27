@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	zipadapter "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/adapters/zip"
 	ce "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/exec"
 	cr "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/registry"
 )
@@ -136,7 +137,9 @@ func registerBuiltInHandlers() {
 		return dir, nil
 	})
 
-	// Concrete CLI adapter handlers are registered by follow-up adapter packages.
+	registerBuiltinHandler("zip", "Create, list, extract, and update ZIP archives", "archive", func(ctx context.Context, args []string) (string, error) {
+		return zipadapter.NewClient(zipadapter.Config{}).Run(ctx, args)
+	})
 }
 
 func registerBuiltinHandler(name, desc, category string, handler ce.CommandHandler) {
