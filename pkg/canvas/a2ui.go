@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -125,7 +126,7 @@ func (r *A2UIRenderer) renderComponent(comp A2UIComponent, indent string) (strin
 }
 
 func (r *A2UIRenderer) renderContainer(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%s<div%s>\n", indent, attrs))
 	childIndent := indent + "  "
@@ -141,9 +142,9 @@ func (r *A2UIRenderer) renderContainer(comp A2UIComponent, indent string) (strin
 }
 
 func (r *A2UIRenderer) renderSection(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "a2ui-section", "")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s<section class=\"a2ui-section\"%s>\n", indent, attrs))
+	sb.WriteString(fmt.Sprintf("%s<section%s>\n", indent, attrs))
 	childIndent := indent + "  "
 	if title, ok := comp.Props["title"].(string); ok && strings.TrimSpace(title) != "" {
 		sb.WriteString(fmt.Sprintf("%s  <h2>%s</h2>\n", indent, template.HTMLEscapeString(title)))
@@ -163,7 +164,6 @@ func (r *A2UIRenderer) renderSection(comp A2UIComponent, indent string) (string,
 }
 
 func (r *A2UIRenderer) renderStack(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
 	direction := "column"
 	if value, ok := comp.Props["direction"].(string); ok && strings.TrimSpace(value) != "" {
 		direction = value
@@ -176,9 +176,10 @@ func (r *A2UIRenderer) renderStack(comp A2UIComponent, indent string) (string, e
 	if value, ok := comp.Props["align"].(string); ok && strings.TrimSpace(value) != "" {
 		align = value
 	}
-	style := fmt.Sprintf(" style=\"display:flex;flex-direction:%s;gap:%s;align-items:%s;\"", template.HTMLEscapeString(direction), template.HTMLEscapeString(gap), template.HTMLEscapeString(align))
+	style := fmt.Sprintf("display:flex;flex-direction:%s;gap:%s;align-items:%s;", direction, gap, align)
+	attrs := r.buildAttributes(comp, "a2ui-stack", style)
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s<div class=\"a2ui-stack\"%s%s>\n", indent, style, attrs))
+	sb.WriteString(fmt.Sprintf("%s<div%s>\n", indent, attrs))
 	childIndent := indent + "  "
 	for _, child := range comp.Children {
 		html, err := r.renderComponent(child, childIndent)
@@ -196,7 +197,7 @@ func (r *A2UIRenderer) renderText(comp A2UIComponent, indent string) (string, er
 	if comp.Type == "span" {
 		tag = "span"
 	}
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	content := template.HTMLEscapeString(comp.Content)
 	return fmt.Sprintf("%s<%s%s>%s</%s>\n", indent, tag, attrs, content, tag), nil
 }
@@ -210,13 +211,13 @@ func (r *A2UIRenderer) renderHeading(comp A2UIComponent, indent string) (string,
 		}
 		tag = fmt.Sprintf("h%d", int(level))
 	}
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	content := template.HTMLEscapeString(comp.Content)
 	return fmt.Sprintf("%s<%s%s>%s</%s>\n", indent, tag, attrs, content, tag), nil
 }
 
 func (r *A2UIRenderer) renderButton(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	content := template.HTMLEscapeString(comp.Content)
 	if content == "" {
 		content = "Button"
@@ -225,7 +226,7 @@ func (r *A2UIRenderer) renderButton(comp A2UIComponent, indent string) (string, 
 }
 
 func (r *A2UIRenderer) renderInput(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	inputType := "text"
 	if t, ok := comp.Props["inputType"].(string); ok {
 		inputType = t
@@ -239,7 +240,7 @@ func (r *A2UIRenderer) renderInput(comp A2UIComponent, indent string) (string, e
 }
 
 func (r *A2UIRenderer) renderTextarea(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	rows := "4"
 	if value, ok := comp.Props["rows"].(string); ok && strings.TrimSpace(value) != "" {
 		rows = value
@@ -254,7 +255,7 @@ func (r *A2UIRenderer) renderTextarea(comp A2UIComponent, indent string) (string
 }
 
 func (r *A2UIRenderer) renderImage(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	src := ""
 	if s, ok := comp.Props["src"].(string); ok {
 		src = template.HTMLEscapeString(s)
@@ -267,7 +268,7 @@ func (r *A2UIRenderer) renderImage(comp A2UIComponent, indent string) (string, e
 }
 
 func (r *A2UIRenderer) renderLink(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	href := "#"
 	if value, ok := comp.Props["href"].(string); ok && strings.TrimSpace(value) != "" {
 		href = value
@@ -284,7 +285,7 @@ func (r *A2UIRenderer) renderList(comp A2UIComponent, indent string) (string, er
 	if comp.Type == "ol" {
 		tag = "ol"
 	}
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%s<%s%s>\n", indent, tag, attrs))
 	for _, child := range comp.Children {
@@ -296,9 +297,9 @@ func (r *A2UIRenderer) renderList(comp A2UIComponent, indent string) (string, er
 }
 
 func (r *A2UIRenderer) renderCard(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "a2ui-card", "")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s<div class=\"a2ui-card\"%s>\n", indent, attrs))
+	sb.WriteString(fmt.Sprintf("%s<div%s>\n", indent, attrs))
 	childIndent := indent + "  "
 	for _, child := range comp.Children {
 		html, err := r.renderComponent(child, childIndent)
@@ -312,15 +313,14 @@ func (r *A2UIRenderer) renderCard(comp A2UIComponent, indent string) (string, er
 }
 
 func (r *A2UIRenderer) renderGrid(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
 	cols := "3"
 	if c, ok := comp.Props["columns"].(string); ok {
 		cols = c
 	}
-	cols = template.HTMLEscapeString(cols)
-	style := fmt.Sprintf(" style=\"display:grid;grid-template-columns:repeat(%s,1fr);gap:16px;\"", cols)
+	style := fmt.Sprintf("display:grid;grid-template-columns:repeat(%s,1fr);gap:16px;", cols)
+	attrs := r.buildAttributes(comp, "a2ui-grid", style)
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s<div class=\"a2ui-grid\"%s%s>\n", indent, style, attrs))
+	sb.WriteString(fmt.Sprintf("%s<div%s>\n", indent, attrs))
 	childIndent := indent + "  "
 	for _, child := range comp.Children {
 		html, err := r.renderComponent(child, childIndent)
@@ -334,15 +334,15 @@ func (r *A2UIRenderer) renderGrid(comp A2UIComponent, indent string) (string, er
 }
 
 func (r *A2UIRenderer) renderCode(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "a2ui-code", "")
 	content := template.HTMLEscapeString(comp.Content)
-	return fmt.Sprintf("%s<pre class=\"a2ui-code\"%s><code>%s</code></pre>\n", indent, attrs, content), nil
+	return fmt.Sprintf("%s<pre%s><code>%s</code></pre>\n", indent, attrs, content), nil
 }
 
 func (r *A2UIRenderer) renderTable(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "a2ui-table", "")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s<table class=\"a2ui-table\"%s>\n", indent, attrs))
+	sb.WriteString(fmt.Sprintf("%s<table%s>\n", indent, attrs))
 
 	if headers, ok := comp.Props["headers"].([]any); ok {
 		sb.WriteString(fmt.Sprintf("%s  <thead><tr>\n", indent))
@@ -371,7 +371,7 @@ func (r *A2UIRenderer) renderTable(comp A2UIComponent, indent string) (string, e
 }
 
 func (r *A2UIRenderer) renderProgress(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	value := "0"
 	if v, ok := comp.Props["value"].(string); ok {
 		value = v
@@ -386,20 +386,19 @@ func (r *A2UIRenderer) renderProgress(comp A2UIComponent, indent string) (string
 }
 
 func (r *A2UIRenderer) renderBadge(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "a2ui-badge", "")
 	content := template.HTMLEscapeString(comp.Content)
-	return fmt.Sprintf("%s<span class=\"a2ui-badge\"%s>%s</span>\n", indent, attrs, content), nil
+	return fmt.Sprintf("%s<span%s>%s</span>\n", indent, attrs, content), nil
 }
 
 func (r *A2UIRenderer) renderAlert(comp A2UIComponent, indent string) (string, error) {
-	attrs := r.buildAttributes(comp)
 	level := "info"
 	if l, ok := comp.Props["level"].(string); ok {
 		level = l
 	}
-	level = template.HTMLEscapeString(level)
+	attrs := r.buildAttributes(comp, fmt.Sprintf("a2ui-alert a2ui-alert-%s", level), "")
 	content := template.HTMLEscapeString(comp.Content)
-	return fmt.Sprintf("%s<div class=\"a2ui-alert a2ui-alert-%s\"%s>%s</div>\n", indent, level, attrs, content), nil
+	return fmt.Sprintf("%s<div%s>%s</div>\n", indent, attrs, content), nil
 }
 
 func (r *A2UIRenderer) renderGeneric(comp A2UIComponent, indent string) (string, error) {
@@ -409,28 +408,22 @@ func (r *A2UIRenderer) renderGeneric(comp A2UIComponent, indent string) (string,
 			tag = t
 		}
 	}
-	attrs := r.buildAttributes(comp)
+	attrs := r.buildAttributes(comp, "", "")
 	content := template.HTMLEscapeString(comp.Content)
 	return fmt.Sprintf("%s<%s%s>%s</%s>\n", indent, tag, attrs, content, tag), nil
 }
 
-func (r *A2UIRenderer) buildAttributes(comp A2UIComponent) string {
+func (r *A2UIRenderer) buildAttributes(comp A2UIComponent, baseClass string, baseStyle string) string {
 	var sb strings.Builder
 
-	if comp.Styles != nil && len(comp.Styles) > 0 {
-		sb.WriteString(" style=\"")
-		for k, v := range comp.Styles {
-			if !isSafeCSSName(k) {
-				continue
-			}
-			sb.WriteString(fmt.Sprintf("%s:%s;", template.HTMLEscapeString(k), template.HTMLEscapeString(v)))
-		}
-		sb.WriteString("\"")
+	if style := buildStyleValue(baseStyle, comp.Styles); style != "" {
+		sb.WriteString(fmt.Sprintf(" style=\"%s\"", style))
 	}
 
 	if comp.Attributes != nil {
-		for k, v := range comp.Attributes {
-			if k == "style" || !isSafeAttributeName(k) {
+		for _, k := range sortedAttributeKeys(comp.Attributes) {
+			v := comp.Attributes[k]
+			if k == "style" || k == "class" || !isSafeAttributeName(k) {
 				continue
 			}
 			sb.WriteString(fmt.Sprintf(" %s=\"%s\"", k, template.HTMLEscapeString(fmt.Sprintf("%v", v))))
@@ -446,11 +439,74 @@ func (r *A2UIRenderer) buildAttributes(comp A2UIComponent) string {
 		sb.WriteString(fmt.Sprintf(" id=\"%s\"", template.HTMLEscapeString(id)))
 	}
 
-	if className, ok := comp.Props["className"].(string); ok {
-		sb.WriteString(fmt.Sprintf(" class=\"%s\"", template.HTMLEscapeString(className)))
+	if classValue := buildClassValue(baseClass, comp); classValue != "" {
+		sb.WriteString(fmt.Sprintf(" class=\"%s\"", classValue))
 	}
 
 	return sb.String()
+}
+
+func buildStyleValue(baseStyle string, styles map[string]string) string {
+	var sb strings.Builder
+	baseStyle = strings.TrimSpace(baseStyle)
+	if baseStyle != "" {
+		sb.WriteString(template.HTMLEscapeString(baseStyle))
+		if !strings.HasSuffix(baseStyle, ";") {
+			sb.WriteString(";")
+		}
+	}
+
+	if len(styles) > 0 {
+		keys := make([]string, 0, len(styles))
+		for k := range styles {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := styles[k]
+			if !isSafeCSSName(k) {
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("%s:%s;", template.HTMLEscapeString(k), template.HTMLEscapeString(v)))
+		}
+	}
+
+	return sb.String()
+}
+
+func buildClassValue(baseClass string, comp A2UIComponent) string {
+	classes := make([]string, 0, 3)
+	baseClass = strings.TrimSpace(baseClass)
+	if baseClass != "" {
+		classes = append(classes, baseClass)
+	}
+	if comp.Attributes != nil {
+		if value, ok := comp.Attributes["class"]; ok {
+			className := strings.TrimSpace(fmt.Sprintf("%v", value))
+			if className != "" {
+				classes = append(classes, className)
+			}
+		}
+	}
+	if className, ok := comp.Props["className"].(string); ok {
+		className = strings.TrimSpace(className)
+		if className != "" {
+			classes = append(classes, className)
+		}
+	}
+	if len(classes) == 0 {
+		return ""
+	}
+	return template.HTMLEscapeString(strings.Join(classes, " "))
+}
+
+func sortedAttributeKeys(attrs map[string]any) []string {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func isSafeHTMLName(name string) bool {

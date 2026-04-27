@@ -446,6 +446,94 @@ func TestA2UIEscapesAttributesAndRejectsUnsafeNames(t *testing.T) {
 	}
 }
 
+func TestA2UIMergesBuiltInAndCallerAttributes(t *testing.T) {
+	renderer := NewA2UIRenderer()
+	html, err := renderer.Render(&A2UIDocument{
+		Title: "Attributes",
+		Components: []A2UIComponent{
+			{
+				Type: "stack",
+				Props: map[string]any{
+					"className": "custom-stack",
+					"gap":       "4px",
+				},
+				Styles: map[string]string{
+					"color": "red",
+				},
+			},
+			{
+				Type: "grid",
+				Props: map[string]any{
+					"className": "custom-grid",
+					"columns":   "2",
+				},
+				Styles: map[string]string{
+					"margin": "0",
+				},
+			},
+			{
+				Type: "card",
+				Props: map[string]any{
+					"className": "prop-card",
+				},
+				Attributes: map[string]any{
+					"class": "attr-card",
+				},
+			},
+			{
+				Type: "badge",
+				Props: map[string]any{
+					"className": "custom-badge",
+				},
+				Content: "Badge",
+			},
+			{
+				Type: "alert",
+				Props: map[string]any{
+					"className": "custom-alert",
+					"level":     "warning",
+				},
+				Content: "Alert",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	cases := []struct {
+		name      string
+		needle    string
+		wantClass string
+		wantStyle bool
+	}{
+		{name: "stack", needle: "a2ui-stack", wantClass: `class="a2ui-stack custom-stack"`, wantStyle: true},
+		{name: "grid", needle: "a2ui-grid", wantClass: `class="a2ui-grid custom-grid"`, wantStyle: true},
+		{name: "card", needle: "a2ui-card", wantClass: `class="a2ui-card attr-card prop-card"`},
+		{name: "badge", needle: "a2ui-badge", wantClass: `class="a2ui-badge custom-badge"`},
+		{name: "alert", needle: "a2ui-alert-warning", wantClass: `class="a2ui-alert a2ui-alert-warning custom-alert"`},
+	}
+
+	for _, tc := range cases {
+		line := lineContaining(html, tc.needle)
+		if line == "" {
+			t.Fatalf("%s: expected rendered line containing %q:\n%s", tc.name, tc.needle, html)
+		}
+		if strings.Count(line, ` class=`) != 1 {
+			t.Fatalf("%s: expected one class attribute, got line:\n%s", tc.name, line)
+		}
+		if !strings.Contains(line, tc.wantClass) {
+			t.Fatalf("%s: expected merged class %s, got line:\n%s", tc.name, tc.wantClass, line)
+		}
+		if tc.wantStyle && strings.Count(line, ` style=`) != 1 {
+			t.Fatalf("%s: expected one style attribute, got line:\n%s", tc.name, line)
+		}
+		if !tc.wantStyle && strings.Count(line, ` style=`) != 0 {
+			t.Fatalf("%s: expected no style attribute, got line:\n%s", tc.name, line)
+		}
+	}
+}
+
 func containsAll(value string, snippets []string) bool {
 	for _, snippet := range snippets {
 		if !strings.Contains(value, snippet) {
@@ -453,4 +541,13 @@ func containsAll(value string, snippets []string) bool {
 		}
 	}
 	return true
+}
+
+func lineContaining(value string, needle string) string {
+	for _, line := range strings.Split(value, "\n") {
+		if strings.Contains(line, "<") && strings.Contains(line, needle) {
+			return line
+		}
+	}
+	return ""
 }
