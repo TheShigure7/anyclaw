@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -22,7 +21,7 @@ type URLSignerConfig struct {
 
 func DefaultURLSignerConfig() URLSignerConfig {
 	return URLSignerConfig{
-		SecretKey:     generateSignerSecret(),
+		SecretKey:     "",
 		DefaultExpiry: 24 * time.Hour,
 		MaxExpiry:     7 * 24 * time.Hour,
 	}
@@ -38,9 +37,6 @@ type URLSigner struct {
 
 func NewURLSigner(cfg URLSignerConfig) *URLSigner {
 	secret := []byte(cfg.SecretKey)
-	if len(secret) == 0 {
-		secret = []byte(generateSignerSecret())
-	}
 
 	maxExp := cfg.MaxExpiry
 	if maxExp <= 0 {
@@ -61,6 +57,20 @@ func NewURLSigner(cfg URLSignerConfig) *URLSigner {
 		maxExpiry:   maxExp,
 		revokedKeys: make(map[string]time.Time),
 	}
+}
+
+func (s *URLSigner) secretKeySnapshot() ([]byte, time.Duration, time.Duration, error) {
+	s.mu.RLock()
+	secret := append([]byte(nil), s.secretKey...)
+	defExp := s.defaultExp
+	maxExp := s.maxExpiry
+	s.mu.RUnlock()
+
+	if len(secret) == 0 {
+		return nil, 0, 0, fmt.Errorf("no URL signer secret configured")
+	}
+
+	return secret, defExp, maxExp, nil
 }
 
 func (s *URLSigner) SetSecretKey(key string) {
@@ -88,11 +98,10 @@ func (s *URLSigner) SetMaxExpiry(d time.Duration) {
 }
 
 func (s *URLSigner) SignURL(baseURL string, key string, expires time.Duration, metadata map[string]string) (string, error) {
-	s.mu.RLock()
-	secret := s.secretKey
-	defExp := s.defaultExp
-	maxExp := s.maxExpiry
-	s.mu.RUnlock()
+	secret, defExp, maxExp, err := s.secretKeySnapshot()
+	if err != nil {
+		return "", err
+	}
 
 	if expires <= 0 {
 		expires = defExp
@@ -134,8 +143,12 @@ func (s *URLSigner) SignURL(baseURL string, key string, expires time.Duration, m
 }
 
 func (s *URLSigner) VerifyURL(signedURL string) (string, time.Time, map[string]string, error) {
+	secret, _, _, err := s.secretKeySnapshot()
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+
 	s.mu.RLock()
-	secret := s.secretKey
 	revoked := make(map[string]time.Time, len(s.revokedKeys))
 	for k, v := range s.revokedKeys {
 		revoked[k] = v
@@ -202,9 +215,10 @@ func (s *URLSigner) VerifyURL(signedURL string) (string, time.Time, map[string]s
 }
 
 func (s *URLSigner) RevokeURL(signedURL string) error {
-	s.mu.RLock()
-	secret := s.secretKey
-	s.mu.RUnlock()
+	secret, _, _, err := s.secretKeySnapshot()
+	if err != nil {
+		return err
+	}
 
 	u, err := url.Parse(signedURL)
 	if err != nil {
@@ -304,14 +318,6 @@ func (s *URLSigner) SignStorageObject(storage StorageBackend, key string, expire
 	}
 
 	return s.SignURL(baseURL, key, expires, nil)
-}
-
-func generateSignerSecret() string {
-	b := make([]byte, 32)
-	for i := range b {
-		b[i] = byte(i * 7 % 256)
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 type SignedURLResult struct {

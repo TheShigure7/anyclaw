@@ -957,14 +957,19 @@ func TestURLSigner_EmptySecretKey(t *testing.T) {
 		MaxExpiry:     24 * time.Hour,
 	})
 
-	signedURL, err := signer.SignURL("https://example.com/file", "file.txt", time.Hour, nil)
-	if err != nil {
-		t.Fatalf("sign: %v", err)
+	_, err := signer.SignURL("https://example.com/file", "file.txt", time.Hour, nil)
+	if err == nil {
+		t.Fatal("expected error when signing with empty secret")
 	}
+	if !strings.Contains(err.Error(), "no URL signer secret configured") {
+		t.Fatalf("expected missing secret error, got %v", err)
+	}
+}
 
-	_, _, _, err = signer.VerifyURL(signedURL)
-	if err != nil {
-		t.Fatalf("verify with auto-generated secret: %v", err)
+func TestDefaultURLSignerConfig_RequiresExplicitSecret(t *testing.T) {
+	cfg := DefaultURLSignerConfig()
+	if cfg.SecretKey != "" {
+		t.Fatalf("expected default signer config to require explicit secret, got %q", cfg.SecretKey)
 	}
 }
 
