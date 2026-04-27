@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	ce "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/exec"
 	cr "github.com/1024XEngineer/anyclaw/pkg/extensions/adapters/cli/registry"
@@ -124,7 +125,7 @@ func registerBuiltInHandlers() {
 	})
 
 	registerBuiltinHandler("date", "Return the current adapter date", "utility", func(ctx context.Context, args []string) (string, error) {
-		return "2026-04-03", nil
+		return time.Now().UTC().Format(time.DateOnly), nil
 	})
 
 	registerBuiltinHandler("pwd", "Return the current working directory", "utility", func(ctx context.Context, args []string) (string, error) {

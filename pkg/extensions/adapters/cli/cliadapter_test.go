@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestInitRegistersBuiltinHandlers(t *testing.T) {
@@ -29,6 +30,14 @@ func TestInitRegistersBuiltinHandlers(t *testing.T) {
 	}
 	if output != "hello cli" {
 		t.Fatalf("echo output = %q, want hello cli", output)
+	}
+
+	output, err = Exec(context.Background(), "date", nil)
+	if err != nil {
+		t.Fatalf("Exec date: %v", err)
+	}
+	if output != time.Now().UTC().Format(time.DateOnly) {
+		t.Fatalf("date output = %q, want current UTC date", output)
 	}
 }
 
