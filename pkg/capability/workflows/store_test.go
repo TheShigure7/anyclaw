@@ -149,6 +149,13 @@ func TestCheckpointManagerRecover(t *testing.T) {
 	if len(recovered.Evidence) != 1 || recovered.Evidence[0].Type != "checkpoint" {
 		t.Fatalf("evidence = %+v, want checkpoint evidence", recovered.Evidence)
 	}
+	persisted, err := store.LoadExecution("exec_checkpoint")
+	if err != nil {
+		t.Fatalf("LoadExecution after Recover: %v", err)
+	}
+	if persisted.Status != ExecutionRunning || persisted.Error != nil {
+		t.Fatalf("persisted recovered execution = %+v, want running without error", persisted)
+	}
 
 	recovered.Status = ExecutionCompleted
 	if err := store.SaveExecution(recovered); err != nil {

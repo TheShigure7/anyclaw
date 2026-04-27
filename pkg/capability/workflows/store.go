@@ -397,6 +397,9 @@ func (cm *CheckpointManager) Recover(executionID string) (*ExecutionContext, err
 	}
 	exec.Status = ExecutionRunning
 	exec.Error = nil
+	if err := cm.store.SaveExecution(exec); err != nil {
+		return nil, fmt.Errorf("persist recovered execution: %w", err)
+	}
 	return exec, nil
 }
 
