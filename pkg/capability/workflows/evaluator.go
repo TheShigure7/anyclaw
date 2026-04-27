@@ -38,6 +38,12 @@ type evaluator struct {
 
 func (e *evaluator) evalExpr(expr string) (any, error) {
 	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return nil, fmt.Errorf("empty expression")
+	}
+	if err := validateBalancedDelimiters(expr); err != nil {
+		return nil, err
+	}
 
 	// Handle logical OR (lowest precedence)
 	if idx := findLogicalOp(expr, "||"); idx >= 0 {
@@ -318,6 +324,10 @@ func (e *evaluator) evalAtom(expr string) (any, error) {
 		return e.resolveVar(expr), nil
 	}
 
+	if containsExpressionSyntax(expr) {
+		return nil, fmt.Errorf("invalid expression syntax: %s", expr)
+	}
+
 	// Bare word (treat as string)
 	return expr, nil
 }
@@ -379,6 +389,57 @@ func resolveNested(m map[string]any, keys []string) any {
 }
 
 // Helpers
+
+func validateBalancedDelimiters(expr string) error {
+	var stack []byte
+	inString := false
+	stringChar := byte(0)
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if inString {
+			if c == stringChar {
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			inString = true
+			stringChar = c
+		case '(', '[', '{':
+			stack = append(stack, c)
+		case ')', ']', '}':
+			if len(stack) == 0 || !matchingDelimiter(stack[len(stack)-1], c) {
+				return fmt.Errorf("unbalanced delimiter near %q", c)
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+	if inString {
+		return fmt.Errorf("unterminated string literal")
+	}
+	if len(stack) > 0 {
+		return fmt.Errorf("unbalanced delimiter near %q", stack[len(stack)-1])
+	}
+	return nil
+}
+
+func matchingDelimiter(open, close byte) bool {
+	switch open {
+	case '(':
+		return close == ')'
+	case '[':
+		return close == ']'
+	case '{':
+		return close == '}'
+	default:
+		return false
+	}
+}
+
+func containsExpressionSyntax(expr string) bool {
+	return strings.ContainsAny(expr, "()[]{}!<>=&|")
+}
 
 func findLogicalOp(expr string, op string) int {
 	depth := 0

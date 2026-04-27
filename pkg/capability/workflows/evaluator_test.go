@@ -180,6 +180,31 @@ func TestEvalConditionRejectsInvalidExpressions(t *testing.T) {
 			expr: "is_string(contains('only-one-arg'))",
 			want: "contains() requires 2 arguments",
 		},
+		{
+			name: "bare not",
+			expr: "!",
+			want: "empty expression",
+		},
+		{
+			name: "trailing logical operator",
+			expr: "$active &&",
+			want: "empty expression",
+		},
+		{
+			name: "unbalanced parenthesis",
+			expr: "($score < 40",
+			want: "unbalanced delimiter",
+		},
+		{
+			name: "invalid operator fragment",
+			expr: "$active &&& $missing",
+			want: "invalid expression syntax",
+		},
+		{
+			name: "unterminated string",
+			expr: "$name == 'anyclaw",
+			want: "unterminated string literal",
+		},
 	}
 
 	for _, tt := range tests {
