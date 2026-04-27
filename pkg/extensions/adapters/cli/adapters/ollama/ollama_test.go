@@ -17,7 +17,7 @@ func TestRunListsModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run list: %v", err)
 	}
-	if output != "llama2\ncodellama" {
+	if output != "llama3.2\ncodellama" {
 		t.Fatalf("output = %q, want model list", output)
 	}
 }
@@ -52,11 +52,11 @@ func TestShowReturnsFormattedJSON(t *testing.T) {
 	server := newOllamaTestServer(t)
 	client := newTestClient(t, server)
 
-	output, err := client.Run(context.Background(), []string{"show", "llama2"})
+	output, err := client.Run(context.Background(), []string{"show", "llama3.2"})
 	if err != nil {
 		t.Fatalf("Run show: %v", err)
 	}
-	if !strings.Contains(output, `"name": "llama2"`) {
+	if !strings.Contains(output, `"name": "llama3.2"`) {
 		t.Fatalf("output = %q, want model json", output)
 	}
 }
@@ -139,7 +139,7 @@ func newOllamaTestServer(t *testing.T) *httptest.Server {
 		switch r.URL.Path {
 		case "/api/tags":
 			writeJSON(t, w, listResponse{Models: []Model{
-				{Name: "llama2"},
+				{Name: "llama3.2"},
 				{Name: "codellama"},
 			}})
 		case "/api/generate":
@@ -165,10 +165,10 @@ func newOllamaTestServer(t *testing.T) *httptest.Server {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode show request: %v", err)
 			}
-			if req["name"] != "llama2" {
-				t.Fatalf("show request = %+v, want llama2", req)
+			if req["name"] != "llama3.2" {
+				t.Fatalf("show request = %+v, want llama3.2", req)
 			}
-			writeJSON(t, w, map[string]any{"name": "llama2", "family": "llama"})
+			writeJSON(t, w, map[string]any{"name": "llama3.2", "family": "llama"})
 		default:
 			http.NotFound(w, r)
 		}

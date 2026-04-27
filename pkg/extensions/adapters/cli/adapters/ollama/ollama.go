@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultBaseURL = "http://localhost:11434"
-	defaultModel   = "llama2"
+	defaultModel   = "llama3.2"
 )
 
 type Client struct {
