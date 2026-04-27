@@ -1,7 +1,9 @@
 package workflow
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -156,7 +158,7 @@ func (e *evaluator) evalExpr(expr string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return compare(left, right, op), nil
+		return compare(left, right, op)
 	}
 
 	// Handle literal values and variable references
@@ -595,7 +597,7 @@ func splitArgs(s string) []string {
 	return args
 }
 
-func compare(left, right any, op string) bool {
+func compare(left, right any, op string) (bool, error) {
 	lStr := toStr(left)
 	rStr := toStr(right)
 	lNum, lIsNum := toNum(left)
@@ -604,35 +606,38 @@ func compare(left, right any, op string) bool {
 	if lIsNum && rIsNum {
 		switch op {
 		case "==":
-			return lNum == rNum
+			return lNum == rNum, nil
 		case "!=":
-			return lNum != rNum
+			return lNum != rNum, nil
 		case "<":
-			return lNum < rNum
+			return lNum < rNum, nil
 		case ">":
-			return lNum > rNum
+			return lNum > rNum, nil
 		case "<=":
-			return lNum <= rNum
+			return lNum <= rNum, nil
 		case ">=":
-			return lNum >= rNum
+			return lNum >= rNum, nil
 		}
+	}
+	if isNumericLike(left) || isNumericLike(right) {
+		return false, fmt.Errorf("cannot compare numeric and non-numeric values with %s", op)
 	}
 
 	switch op {
 	case "==":
-		return lStr == rStr
+		return lStr == rStr, nil
 	case "!=":
-		return lStr != rStr
+		return lStr != rStr, nil
 	case "<":
-		return lStr < rStr
+		return lStr < rStr, nil
 	case ">":
-		return lStr > rStr
+		return lStr > rStr, nil
 	case "<=":
-		return lStr <= rStr
+		return lStr <= rStr, nil
 	case ">=":
-		return lStr >= rStr
+		return lStr >= rStr, nil
 	}
-	return false
+	return false, nil
 }
 
 func inCollection(item any, collection any) bool {
@@ -719,12 +724,36 @@ func toNum(val any) (float64, bool) {
 	switch v := val.(type) {
 	case int:
 		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
 	case int64:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
 		return float64(v), true
 	case float64:
 		return v, true
+	case float32:
+		return float64(v), true
 	case uint:
 		return float64(v), true
+	case uint64:
+		if v > math.MaxInt64 {
+			return 0, false
+		}
+		return float64(v), true
+	case json.Number:
+		if n, err := v.Float64(); err == nil {
+			return n, true
+		}
+		return 0, false
 	case string:
 		if n, err := strconv.ParseFloat(v, 64); err == nil {
 			return n, true
@@ -732,5 +761,16 @@ func toNum(val any) (float64, bool) {
 		return 0, false
 	default:
 		return 0, false
+	}
+}
+
+func isNumericLike(val any) bool {
+	switch val.(type) {
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64, json.Number:
+		return true
+	default:
+		return false
 	}
 }

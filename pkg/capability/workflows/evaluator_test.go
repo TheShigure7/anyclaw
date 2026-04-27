@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -159,6 +160,44 @@ func TestEvalConditionNodeOutputReference(t *testing.T) {
 	}
 }
 
+func TestEvalConditionNumericCoercion(t *testing.T) {
+	vars := map[string]any{
+		"small":  int32(42),
+		"ratio":  float32(0.75),
+		"amount": json.Number("100.5"),
+	}
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{
+			name: "int32",
+			expr: "$small < 100",
+		},
+		{
+			name: "float32",
+			expr: "$ratio >= 0.5",
+		},
+		{
+			name: "json number",
+			expr: "$amount > 100",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := EvalCondition(tt.expr, vars)
+			if err != nil {
+				t.Fatalf("EvalCondition: %v", err)
+			}
+			if !got {
+				t.Fatalf("EvalCondition(%q) = false, want true", tt.expr)
+			}
+		})
+	}
+}
+
 func TestEvalConditionRejectsInvalidExpressions(t *testing.T) {
 	tests := []struct {
 		name string
@@ -205,11 +244,19 @@ func TestEvalConditionRejectsInvalidExpressions(t *testing.T) {
 			expr: "$name == 'anyclaw",
 			want: "unterminated string literal",
 		},
+		{
+			name: "unsupported oversized uint64",
+			expr: "$huge < 100",
+			want: "cannot compare numeric and non-numeric values",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := EvalCondition(tt.expr, nil)
+			vars := map[string]any{
+				"huge": uint64(^uint64(0)),
+			}
+			_, err := EvalCondition(tt.expr, vars)
 			if err == nil {
 				t.Fatal("expected error")
 			}
