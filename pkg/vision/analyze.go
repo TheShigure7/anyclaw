@@ -423,13 +423,25 @@ func (p *LLMVisionProvider) Name() string {
 	return "llm-vision"
 }
 
+func (p *LLMVisionProvider) requireClient() (LLMVisionClient, error) {
+	if p == nil || p.cfg.Client == nil {
+		return nil, fmt.Errorf("no LLM vision client configured")
+	}
+	return p.cfg.Client, nil
+}
+
 func (p *LLMVisionProvider) AnalyzeImage(ctx context.Context, imageData []byte, mimeType string) (*AnalysisResult, error) {
+	client, err := p.requireClient()
+	if err != nil {
+		return nil, err
+	}
+
 	prompt := p.cfg.Prompt
 	if prompt == "" {
 		prompt = "Describe this image in detail."
 	}
 
-	description, err := p.cfg.Client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
+	description, err := client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM vision analysis: %w", err)
 	}
@@ -462,8 +474,13 @@ func (p *LLMVisionProvider) AnalyzeImageURL(ctx context.Context, imageURL string
 }
 
 func (p *LLMVisionProvider) OCR(ctx context.Context, imageData []byte, mimeType string) ([]DetectedText, error) {
+	client, err := p.requireClient()
+	if err != nil {
+		return nil, err
+	}
+
 	prompt := "Extract all text from this image. Return only the text content, preserving line breaks."
-	description, err := p.cfg.Client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
+	description, err := client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -474,8 +491,13 @@ func (p *LLMVisionProvider) OCR(ctx context.Context, imageData []byte, mimeType 
 }
 
 func (p *LLMVisionProvider) LabelImage(ctx context.Context, imageData []byte, mimeType string) ([]Label, error) {
+	client, err := p.requireClient()
+	if err != nil {
+		return nil, err
+	}
+
 	prompt := "List the main objects and concepts in this image as a comma-separated list. Format each as 'name:confidence' where confidence is 0.0-1.0."
-	description, err := p.cfg.Client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
+	description, err := client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -500,8 +522,13 @@ func (p *LLMVisionProvider) LabelImage(ctx context.Context, imageData []byte, mi
 }
 
 func (p *LLMVisionProvider) DetectObjects(ctx context.Context, imageData []byte, mimeType string) ([]DetectedObject, error) {
+	client, err := p.requireClient()
+	if err != nil {
+		return nil, err
+	}
+
 	prompt := "List all visible objects in this image. For each, provide name and approximate bounding box as x,y,width,height."
-	_, err := p.cfg.Client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
+	_, err = client.AnalyzeImageWithPrompt(ctx, imageData, mimeType, prompt)
 	if err != nil {
 		return nil, err
 	}
