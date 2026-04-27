@@ -113,6 +113,55 @@ func TestDiscoverRoot(t *testing.T) {
 	}
 }
 
+func TestDiscoverRootWalksAncestorsFromNestedStart(t *testing.T) {
+	root := t.TempDir()
+	cliRoot := filepath.Join(root, "CLI-Anything-0.2.0")
+	start := filepath.Join(root, "workspace", "project", "nested")
+	if err := os.MkdirAll(cliRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll cli root: %v", err)
+	}
+	if err := os.MkdirAll(start, 0o755); err != nil {
+		t.Fatalf("MkdirAll start: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cliRoot, "registry.json"), []byte(`{"clis":[]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Chdir(t.TempDir())
+	t.Cleanup(func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	found, ok := DiscoverRoot(start)
+	if !ok || found != cliRoot {
+		t.Fatalf("DiscoverRoot nested = (%q, %v), want (%q, true)", found, ok, cliRoot)
+	}
+}
+
+func TestCLIRootCandidates(t *testing.T) {
+	base := filepath.Clean("/tmp/project")
+	got := cliRootCandidates(base)
+	want := []string{
+		base,
+		filepath.Join(base, "CLI-Anything-0.2.0"),
+		filepath.Join(base, "CLI-Anything"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("candidate count = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("candidate %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestDiscoverRootMissing(t *testing.T) {
 	if found, ok := DiscoverRoot(t.TempDir()); ok || found != "" {
 		t.Fatalf("DiscoverRoot missing = (%q, %v), want empty false", found, ok)

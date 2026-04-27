@@ -146,25 +146,32 @@ func registerBuiltinHandler(name, desc, category string, handler ce.CommandHandl
 }
 
 func DiscoverRoot(start string) (string, bool) {
-	candidates := []string{
-		start,
-		filepath.Join(start, "CLI-Anything-0.2.0"),
-		filepath.Join(start, "CLI-Anything"),
-		"..",
-		"../..",
-		"../../..",
+	current, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
 	}
 
-	for _, candidate := range candidates {
-		abs, err := filepath.Abs(candidate)
-		if err != nil {
-			continue
+	for {
+		for _, candidate := range cliRootCandidates(current) {
+			if _, err := os.Stat(filepath.Join(candidate, "registry.json")); err == nil {
+				return candidate, true
+			}
 		}
 
-		if _, err := os.Stat(filepath.Join(abs, "registry.json")); err == nil {
-			return abs, true
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
 		}
+		current = parent
 	}
 
 	return "", false
+}
+
+func cliRootCandidates(base string) []string {
+	return []string{
+		base,
+		filepath.Join(base, "CLI-Anything-0.2.0"),
+		filepath.Join(base, "CLI-Anything"),
+	}
 }
