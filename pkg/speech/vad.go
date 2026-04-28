@@ -15,6 +15,7 @@ const (
 type VADConfig struct {
 	SampleRate         int
 	FrameSize          int
+	Aggressiveness     int
 	EnergyThreshold    float64
 	ZeroCrossThreshold int
 	SpeechMinFrames    int
@@ -26,6 +27,7 @@ func DefaultVADConfig() VADConfig {
 	return VADConfig{
 		SampleRate:         16000,
 		FrameSize:          320,
+		Aggressiveness:     2,
 		EnergyThreshold:    0.01,
 		ZeroCrossThreshold: 50,
 		SpeechMinFrames:    3,
@@ -59,6 +61,9 @@ func NewVAD(cfg VADConfig) *VAD {
 	}
 	if cfg.FrameSize == 0 {
 		cfg.FrameSize = 320
+	}
+	if cfg.Aggressiveness < 0 || cfg.Aggressiveness > 3 {
+		cfg.Aggressiveness = 2
 	}
 	if cfg.EnergyThreshold == 0 {
 		cfg.EnergyThreshold = 0.01
