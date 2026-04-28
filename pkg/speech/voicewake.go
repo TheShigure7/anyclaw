@@ -64,7 +64,7 @@ type VoiceWakeConfig struct {
 func DefaultVoiceWakeConfig() VoiceWakeConfig {
 	return VoiceWakeConfig{
 		VADConfig:        DefaultVADConfig(),
-		VADProvider:      VADProviderHeuristic,
+		VADProvider:      VADProviderWebRTC,
 		WakeWordConfig:   DefaultWakeWordConfig(),
 		SampleRate:       16000,
 		Channels:         1,

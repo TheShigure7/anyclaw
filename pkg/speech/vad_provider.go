@@ -6,6 +6,7 @@ type VADProviderType string
 
 const (
 	VADProviderHeuristic VADProviderType = "heuristic"
+	VADProviderWebRTC    VADProviderType = "webrtc"
 )
 
 type VADProcessor interface {
@@ -33,6 +34,9 @@ func NewVADManager() *VADManager {
 	m.Register(VADProviderHeuristic, func(cfg VADConfig) (VADProcessor, error) {
 		return NewVAD(cfg), nil
 	})
+	m.Register(VADProviderWebRTC, func(cfg VADConfig) (VADProcessor, error) {
+		return NewWebRTCVAD(cfg)
+	})
 	return m
 }
 
@@ -52,4 +56,3 @@ func (m *VADManager) New(cfg VADConfig, providerType VADProviderType) (VADProces
 
 	return factory(cfg)
 }
-
