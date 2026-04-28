@@ -90,7 +90,9 @@ func (c *openAIAudioAPIClient) buildMultipartBody(audio []byte, options Transcri
 		}
 	}
 
-	if options.WordTimestamps || options.SpeakerLabels {
+	// Streaming requests use response_format=json and should not send
+	// verbose-only timestamp granularities.
+	if !stream && (options.WordTimestamps || options.SpeakerLabels) {
 		if options.WordTimestamps {
 			if err := writer.WriteField("timestamp_granularities[]", "word"); err != nil {
 				return nil, "", NewSTTErrorf(ErrTranscriptionFailed, "openai-whisper: failed to write word timestamp_granularities: %v", err)

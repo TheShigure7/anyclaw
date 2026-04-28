@@ -130,6 +130,7 @@ func NewVoiceWake(cfg VoiceWakeConfig) *VoiceWake {
 	vad, err := vadManager.New(cfg.VADConfig, cfg.VADProvider)
 	if err != nil {
 		log.Printf("voicewake: failed to create VAD provider %q, fallback to heuristic: %v", cfg.VADProvider, err)
+		cfg.VADProvider = VADProviderHeuristic
 		vad = NewVAD(cfg.VADConfig)
 	}
 	wakeDetector := NewWakeWordDetector(cfg.WakeWordConfig)

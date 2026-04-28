@@ -13,6 +13,7 @@ type WebRTCVAD struct {
 	mode       int
 	sampleRate int
 	frameSize  int
+	scratch    []byte
 }
 
 func NewWebRTCVAD(cfg VADConfig) (*WebRTCVAD, error) {
@@ -41,6 +42,7 @@ func NewWebRTCVAD(cfg VADConfig) (*WebRTCVAD, error) {
 		mode:       cfg.Aggressiveness,
 		sampleRate: cfg.SampleRate,
 		frameSize:  cfg.FrameSize,
+		scratch:    make([]byte, cfg.FrameSize*2),
 	}, nil
 }
 
@@ -57,13 +59,14 @@ func (v *WebRTCVAD) ProcessFrame(samples []int16) VADState {
 		return v.inner.ProcessFrame(samples)
 	}
 
-	audio := int16ToLittleEndianBytes(samples)
+	v.inner.mu.Lock()
+	audio := v.frameBytes(samples)
 	isSpeech, err := v.detector.IsSpeech(audio, v.sampleRate)
 	if err != nil {
+		v.inner.mu.Unlock()
 		return v.inner.ProcessFrame(samples)
 	}
 
-	v.inner.mu.Lock()
 	defer v.inner.mu.Unlock()
 
 	energy := v.inner.calculateRMS(samples)
@@ -134,8 +137,12 @@ func (v *WebRTCVAD) Config() VADConfig {
 	return cfg
 }
 
-func int16ToLittleEndianBytes(samples []int16) []byte {
-	out := make([]byte, len(samples)*2)
+func (v *WebRTCVAD) frameBytes(samples []int16) []byte {
+	size := len(samples) * 2
+	if cap(v.scratch) < size {
+		v.scratch = make([]byte, size)
+	}
+	out := v.scratch[:size]
 	for i, s := range samples {
 		binary.LittleEndian.PutUint16(out[i*2:], uint16(s))
 	}
