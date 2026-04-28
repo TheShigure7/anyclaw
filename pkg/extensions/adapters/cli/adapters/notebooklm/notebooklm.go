@@ -115,11 +115,11 @@ func (c *Client) createNotebook(ctx context.Context, name string) (string, error
 }
 
 func (c *Client) source(ctx context.Context, args []string) (string, error) {
-	if len(args) < 2 {
+	if len(args) < 3 || args[0] != "add" {
 		return "", fmt.Errorf("source add <notebook_id> <url/file>")
 	}
-	notebookID := args[0]
-	source := args[1]
+	notebookID := args[1]
+	source := args[2]
 
 	body := map[string]string{"source": source}
 	jsonBody, _ := json.Marshal(body)
