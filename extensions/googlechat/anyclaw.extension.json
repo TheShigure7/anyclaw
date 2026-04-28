@@ -1,0 +1,20 @@
+{
+  "id": "googlechat",
+  "name": "Google Chat Channel",
+  "version": "1.0.0",
+  "description": "Google Chat messaging channel adapter for AnyClaw",
+  "kind": "channel",
+  "channels": ["googlechat"],
+  "entrypoint": "googlechat_adapter.go",
+  "permissions": ["net:out"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "webhook_url": {
+        "type": "string",
+        "description": "Google Chat incoming webhook URL for outbound replies"
+      }
+    },
+    "required": ["webhook_url"]
+  }
+}
