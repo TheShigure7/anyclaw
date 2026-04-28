@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,7 +79,7 @@ func (e *WeChatExtension) handleWebhook(w http.ResponseWriter, r *http.Request) 
 	nonce := query.Get("nonce")
 	echoStr := query.Get("echostr")
 
-	if echoStr != "" {
+	if r.Method == http.MethodGet && echoStr != "" {
 		if e.verifySignature(signature, timestamp, nonce) {
 			w.Write([]byte(echoStr))
 		} else {
@@ -89,6 +90,10 @@ func (e *WeChatExtension) handleWebhook(w http.ResponseWriter, r *http.Request) 
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !e.verifySignature(signature, timestamp, nonce) {
+		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
 
@@ -209,15 +214,18 @@ func (e *WeChatExtension) parseXMLMessage(xml string) *wechatMessage {
 }
 
 func (e *WeChatExtension) verifySignature(signature, timestamp, nonce string) bool {
-	if e.config.Token == "" {
-		return true
+	if strings.TrimSpace(e.config.Token) == "" ||
+		strings.TrimSpace(signature) == "" ||
+		strings.TrimSpace(timestamp) == "" ||
+		strings.TrimSpace(nonce) == "" {
+		return false
 	}
 	arr := []string{e.config.Token, timestamp, nonce}
 	sort.Strings(arr)
 	combined := strings.Join(arr, "")
 	h := sha1.Sum([]byte(combined))
 	computed := fmt.Sprintf("%x", h)
-	return computed == signature
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(signature)) == 1
 }
 
 func (e *WeChatExtension) getAccessToken() (string, error) {

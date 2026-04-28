@@ -30,6 +30,6 @@
         "sensitive": true
       }
     },
-    "required": ["app_id", "app_secret"]
+    "required": ["app_id", "app_secret", "token"]
   }
 }
