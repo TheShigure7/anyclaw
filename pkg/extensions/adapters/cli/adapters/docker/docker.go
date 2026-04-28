@@ -56,8 +56,10 @@ func (c *Client) Run(ctx context.Context, args []string) (string, error) {
 		return c.ps(ctx)
 	case "images", "list-images":
 		return c.images(ctx)
-	case "run", "start":
+	case "run":
 		return c.run(ctx, args[1:])
+	case "start":
+		return c.start(ctx, args[1:])
 	case "stop", "kill":
 		return c.stop(ctx, args[1:])
 	case "rm", "remove":
@@ -175,6 +177,22 @@ func (c *Client) run(ctx context.Context, args []string) (string, error) {
 		return fmt.Sprintf("Container %s started", containerName), nil
 	}
 	return fmt.Sprintf("Container started from image %s", image), nil
+}
+
+func (c *Client) start(ctx context.Context, args []string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("container name or ID required")
+	}
+
+	_, err := c.runDocker(ctx, append([]string{"start"}, args...))
+	if err != nil {
+		return "", err
+	}
+
+	if len(args) == 1 {
+		return fmt.Sprintf("Container %s started", args[0]), nil
+	}
+	return fmt.Sprintf("Containers started: %s", strings.Join(args, ", ")), nil
 }
 
 func (c *Client) stop(ctx context.Context, args []string) (string, error) {
