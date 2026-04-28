@@ -5,7 +5,6 @@
   "description": "WhatsApp messaging channel adapter for AnyClaw",
   "kind": "channel",
   "channels": ["whatsapp"],
-  "entrypoint": "whatsapp_adapter.go",
   "permissions": ["net:out"],
   "config_schema": {
     "type": "object",

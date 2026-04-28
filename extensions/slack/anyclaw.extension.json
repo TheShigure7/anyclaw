@@ -5,7 +5,6 @@
   "description": "Slack messaging channel adapter for AnyClaw",
   "kind": "channel",
   "channels": ["slack"],
-  "entrypoint": "slack_adapter.go",
   "permissions": ["net:out"],
   "config_schema": {
     "type": "object",

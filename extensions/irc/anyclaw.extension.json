@@ -5,7 +5,6 @@
   "description": "IRC messaging channel adapter for AnyClaw",
   "kind": "channel",
   "channels": ["irc"],
-  "entrypoint": "irc_adapter.go",
   "permissions": ["net:out"],
   "config_schema": {
     "type": "object",

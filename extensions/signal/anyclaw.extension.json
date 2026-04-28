@@ -5,7 +5,6 @@
   "description": "Signal messaging channel adapter for AnyClaw",
   "kind": "channel",
   "channels": ["signal"],
-  "entrypoint": "signal_adapter.go",
   "permissions": ["net:out"],
   "config_schema": {
     "type": "object",
