@@ -82,7 +82,8 @@ func ApprovalGateExampleGraph() *Graph {
 
 	graph.AddInputParam("request", "object", "Incoming request payload.", true, nil)
 	graph.AddInputParam("risk_threshold", "number", "Score threshold that requires approval.", false, 0.7)
-	graph.AddOutputParam("approved", "boolean", "Whether the request was approved.", "$finalize.approved")
+	graph.AddOutputParam("manual_approved", "boolean", "Whether the manual branch approved the request.", "$finalize_manual.approved")
+	graph.AddOutputParam("auto_approved", "boolean", "Whether the automatic branch approved the request.", "$finalize_auto.approved")
 
 	scoreID := addExampleAction(graph, "score_request", "Score request", "example.policy", "score", map[string]any{
 		"request": "$request",
@@ -96,16 +97,20 @@ func ApprovalGateExampleGraph() *Graph {
 		"request": "$request",
 		"reason":  "below threshold",
 	}, 520, 90)
-	finalizeID := addExampleAction(graph, "finalize", "Finalize request", "example.policy", "finalize", map[string]any{
-		"manual_result": "$manual_approval.approved",
-		"auto_result":   "$auto_approve.approved",
-	}, 780, 0)
+	finalizeManualID := addExampleAction(graph, "finalize_manual", "Finalize manual approval", "example.policy", "finalize", map[string]any{
+		"approved": "$manual_approval.approved",
+		"path":     "manual",
+	}, 780, -90)
+	finalizeAutoID := addExampleAction(graph, "finalize_auto", "Finalize auto approval", "example.policy", "finalize", map[string]any{
+		"approved": "$auto_approve.approved",
+		"path":     "auto",
+	}, 780, 90)
 
 	graph.AddEdge(scoreID, checkID, "default")
 	graph.AddEdge(checkID, approvalID, "condition_true")
 	graph.AddEdge(checkID, autoID, "condition_false")
-	graph.AddEdge(approvalID, finalizeID, "default")
-	graph.AddEdge(autoID, finalizeID, "default")
+	graph.AddEdge(approvalID, finalizeManualID, "default")
+	graph.AddEdge(autoID, finalizeAutoID, "default")
 
 	return graph
 }

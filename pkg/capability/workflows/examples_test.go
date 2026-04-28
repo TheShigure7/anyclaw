@@ -104,6 +104,16 @@ func TestWorkflowExamplesUseExamplePluginNamespace(t *testing.T) {
 	}
 }
 
+func TestApprovalGateExampleDoesNotMergeExclusiveOutputs(t *testing.T) {
+	graph := ApprovalGateExampleGraph()
+	for _, node := range graph.Nodes {
+		refs := collectSimpleRefs(node.Inputs)
+		if containsRef(refs, "$manual_approval.approved") && containsRef(refs, "$auto_approve.approved") {
+			t.Fatalf("node %q reads both exclusive approval branch outputs: %v", node.ID, refs)
+		}
+	}
+}
+
 var simpleNodeReferencePattern = regexp.MustCompile(`^\$[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+$`)
 
 func collectSimpleRefs(value any) []string {
@@ -126,4 +136,13 @@ func collectSimpleRefs(value any) []string {
 		return refs
 	}
 	return nil
+}
+
+func containsRef(refs []string, want string) bool {
+	for _, ref := range refs {
+		if ref == want {
+			return true
+		}
+	}
+	return false
 }
