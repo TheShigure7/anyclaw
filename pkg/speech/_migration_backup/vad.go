@@ -45,14 +45,6 @@ type VAD struct {
 
 type VADStateListener func(state VADState, energy float64, zcr float64)
 
-func (v *VAD) Name() string {
-	return "heuristic-vad"
-}
-
-func (v *VAD) Type() VADProviderType {
-	return VADProviderHeuristic
-}
-
 func NewVAD(cfg VADConfig) *VAD {
 	if cfg.SampleRate == 0 {
 		cfg.SampleRate = 16000
