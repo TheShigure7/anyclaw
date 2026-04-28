@@ -137,7 +137,7 @@ func (r *Router) Candidates(ctx context.Context, req CandidateRequest) ([]Candid
 		})
 	}
 
-	if len(candidates) == 0 {
+	if !hasRunnableCandidate(candidates) {
 		candidates = append(candidates, Candidate{
 			Kind:       CandidateDirect,
 			ID:         "direct-default",
@@ -255,6 +255,15 @@ func candidateFromRule(rule RouteRule, score float64) Candidate {
 		RiskLevel:        strings.TrimSpace(rule.RiskLevel),
 		Reason:           reason,
 	}
+}
+
+func hasRunnableCandidate(candidates []Candidate) bool {
+	for _, candidate := range candidates {
+		if candidate.Kind != CandidateApproval && candidate.Kind != CandidateClarify {
+			return true
+		}
+	}
+	return false
 }
 
 func detectRisk(input string) string {

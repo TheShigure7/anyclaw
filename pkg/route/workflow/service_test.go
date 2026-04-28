@@ -130,6 +130,26 @@ func TestCandidatesAddsApprovalForHighRiskInput(t *testing.T) {
 	}
 }
 
+func TestCandidatesAddsDirectFallbackWhenHighRiskHasNoRunnableMatch(t *testing.T) {
+	svc := NewServiceForRegistry(nil, nil)
+
+	candidates, err := svc.Candidates(context.Background(), CandidateRequest{
+		Input: "delete production secrets",
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("expected approval gate and direct fallback, got %d: %#v", len(candidates), candidates)
+	}
+	if candidates[0].Kind != CandidateApproval {
+		t.Fatalf("expected approval candidate first, got %q", candidates[0].Kind)
+	}
+	if candidates[1].Kind != CandidateDirect {
+		t.Fatalf("expected direct fallback after approval, got %q", candidates[1].Kind)
+	}
+}
+
 func TestCandidatesFallsBackToDirectWhenNothingMatches(t *testing.T) {
 	svc := NewServiceForRegistry([]RouteRule{
 		{
