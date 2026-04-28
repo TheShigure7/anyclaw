@@ -66,20 +66,16 @@ func (c *Client) version(ctx context.Context) (string, error) {
 
 func (c *Client) info(ctx context.Context) (string, error) {
 	nodeVersion, _ := c.run(ctx, []string{"--version"})
-	npmVersion, _ := c.run(c.ctxWithNPM(ctx), []string{"--version"})
+	npmVersion, _ := c.runNPM(ctx, []string{"--version"})
 	return fmt.Sprintf("Node: %s\nNPM: %s", strings.TrimSpace(nodeVersion), strings.TrimSpace(npmVersion)), nil
-}
-
-func (c *Client) ctxWithNPM(ctx context.Context) context.Context {
-	return ctx
 }
 
 func (c *Client) runScript(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 {
-		return c.run(c.ctxWithNPM(ctx), []string{c.npmPath, "run"})
+		return c.runNPM(ctx, []string{"run"})
 	}
 
-	return c.run(c.ctxWithNPM(ctx), append([]string{c.npmPath, "run"}, args...))
+	return c.runNPM(ctx, append([]string{"run"}, args...))
 }
 
 func (c *Client) exec(ctx context.Context, args []string) (string, error) {
@@ -92,9 +88,7 @@ func (c *Client) exec(ctx context.Context, args []string) (string, error) {
 }
 
 func (c *Client) npm(ctx context.Context, args []string) (string, error) {
-	npmArgs := []string{c.npmPath}
-	npmArgs = append(npmArgs, args...)
-	return c.run(ctx, npmArgs)
+	return c.runNPM(ctx, args)
 }
 
 func (c *Client) npx(ctx context.Context, args []string) (string, error) {
@@ -110,7 +104,15 @@ func (c *Client) repl(ctx context.Context) (string, error) {
 }
 
 func (c *Client) run(ctx context.Context, args []string) (string, error) {
-	cmd := exec.CommandContext(ctx, c.nodePath, args...)
+	return c.runCommand(ctx, c.nodePath, args)
+}
+
+func (c *Client) runNPM(ctx context.Context, args []string) (string, error) {
+	return c.runCommand(ctx, c.npmPath, args)
+}
+
+func (c *Client) runCommand(ctx context.Context, path string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, path, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), err
